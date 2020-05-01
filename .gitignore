@@ -1,0 +1,5 @@
+*.txt
+csv
+acsvdata
+pyqt/__pycache__
+pyqt/*.txt
