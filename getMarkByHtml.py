@@ -27,6 +27,7 @@ class getStockCsv(object):
     
     logfp               = 0
     lastcsvfile         = ''
+    workdaydata         = pd.DataFrame()
     lastcsvdata         = pd.DataFrame()
     lasttimedata        = pd.DataFrame()
     csvdir              = os.path.dirname(os.path.abspath(__file__)) + '\\csv'
@@ -37,10 +38,55 @@ class getStockCsv(object):
         self.get_log_path(logname)
         if (os.path.exists(self.csvdir) == False):
             os.makedirs(self.csvdir)
+        self.get_trade_day()
         self.getMarket('A')
         # self.get_stock_update_last_time(1)
         # self.get_stock_update_process(1)
-        self.task_loop(0, self.lastcsvdata.index.size)
+        # self.task_loop(0, self.lastcsvdata.index.size)
+
+    def is_trade_day(self, day):
+        if(len(day) != 8):
+            return 0
+        day = day[:4] + '-' + day[4:6] + '-' + day[6:]
+        tradedaydata = self.workdaydata[ self.workdaydata['DATE'] == day ]
+        return tradedaydata['TRADEDAY']
+
+    def get_trade_day(self, dayname="tradeday.csv", start='2020-01-01', end='none', update=False):
+        from datetime import datetime,timedelta
+        from chinese_calendar import is_holiday
+        workdayfiledir = self.csvdir + '\\' + dayname
+        # today = datetime.strptime(today,'%Y-%m-%d').date()  
+        if(os.path.isfile(workdayfiledir) == False or update == True):
+            update = True
+        else:
+            self.workdaydata = pd.read_csv(workdayfiledir, encoding='gbk')#, nrows=1)
+            today = datetime.today().date().strftime("%Y-%m-%d")
+            if(today not in self.workdaydata['DATE'].values):
+                update = True
+
+        today = datetime.today().date().strftime("%Y")
+        today = today + '-12-31'
+        if(update):
+            if type(start) == str:
+                start = datetime.strptime(start,'%Y-%m-%d').date()
+            if(end == 'none'):
+                end = datetime.strptime(today,'%Y-%m-%d').date()    
+            elif type(end) == str:
+                end = datetime.strptime(end,'%Y-%m-%d').date()  
+            if start > end:
+                start,end = end,start
+            self.workdaydata.insert(0, 'DATE', '')
+            self.workdaydata.insert(1, 'TRADEDAY', '')
+                
+            while True:
+                if start > end:
+                    break
+                if is_holiday(start) or start.weekday()==5 or start.weekday()==6:
+                    self.workdaydata = self.workdaydata.append([{'DATE': start.strftime("%Y-%m-%d"), 'TRADEDAY': 0}], ignore_index=True)
+                else:
+                    self.workdaydata = self.workdaydata.append([{'DATE': start.strftime("%Y-%m-%d"), 'TRADEDAY': 1}], ignore_index=True)
+                start += timedelta(days=1)
+            self.workdaydata.to_csv(workdayfiledir, mode='w', encoding='gbk', index=0)#, header=False)
 
     def get_log_path(self, logname="log.txt"):
         logpath = os.path.dirname(os.path.abspath(__file__)) + '\\' + logname
@@ -81,6 +127,20 @@ class getStockCsv(object):
             print (type(e) )
         return start_day, end_day 
 
+    def date_formal(self, date):
+        if(date[4] == '/' or date[4] == '-'):
+            if(len(date) == 8):
+                date = date[:4] + '0' + date[5] + '0' + date[7]
+            elif(len(date) == 10):
+                date   = date.replace('/', '').replace('-', '')  
+            elif(date[6] == '/' or date[6] == '-' ):
+                date = date[:4] + '0' + date[5] + date[7:]
+            else:
+                date = date[:4] + date[5:7] + '0' + date[-1]
+        date = date[:4] + '-' + date[4:6] + '-' + date[6:]
+        return date
+            
+
     def get_stock_data(self, index, endsave):
         needupdate = 1
         start = ALL_BEGIN_DATE
@@ -93,15 +153,7 @@ class getStockCsv(object):
                 if (laststockdata['日期'].empty == False):
                     start = str(laststockdata.loc[0, '日期'])   
         # start = '2020/18/19'
-        if(start[4] == '/'):
-            if(len(start) == 8):
-                start = start[:4] + '0' + start[5] + '0' + start[7]
-            elif(len(start) == 10):
-                start   = start.replace('/', '')  
-            elif(start[6] == '/'):
-                start = start[:4] + '0' + start[5] + start[7:]
-            else:
-                start = start[:4] + start[5:7] + '0' + start[-1]
+        start   = self.date_formal(start)
         start   = start.replace('-0', '0').replace('-', '')
         endsave = endsave.replace('-0', '0').replace('-', '')
         end = datetime.datetime.today().date().strftime("%Y%m%d")
@@ -172,7 +224,7 @@ class getStockCsv(object):
         need_update = 0
         # start_day   = self.lastcsvdata.loc[index, 'BEGINDAY']
         # end_day     = self.lastcsvdata.loc[index, 'ENDDAY']
-        today = datetime.datetime.today().date().strftime("%Y-%m-%d").replace('-0','/').replace('-','/')
+        today = datetime.datetime.today().date().strftime("%Y-%m-%d")
         # print(today)
         # print(self.lastcsvdata.loc[index, ['SYMBOL']]['SYMBOL'])
         if(self.lasttimedata.empty):
@@ -183,21 +235,21 @@ class getStockCsv(object):
             if(timedata.empty):
                 need_update = 1
             else:
-                start_day   = timedata['BEGINDAY'][index]
-                end_day     = timedata['ENDDAY'][index]
-                # print(timedata['QUERYDAY'][index] , today)
-                if (pd.isnull(start_day) or pd.isnull(end_day)):
+                # print(self.date_formal(timedata.loc[index, 'QUERYDAY']), today)
+                if (pd.isnull(timedata.loc[index, 'BEGINDAY']) or pd.isnull(timedata.loc[index, 'ENDDAY']) or pd.isnull(timedata.loc[index, 'QUERYDAY'])):
                     need_update = 1
                 else:
-                    if(timedata['QUERYDAY'][index] != today):
+                    start_day   = self.date_formal(timedata.loc[index, 'BEGINDAY'])
+                    end_day     = self.date_formal(timedata.loc[index, 'ENDDAY'])
+                    if(self.date_formal(timedata.loc[index, 'QUERYDAY']) != today and self.is_trade_day( today )):
                         if(timedata['VOLUME'].empty == False):
                             need_update = 1
         if (need_update):
             start_day, end_day = self.get_stock_update_last_time(index)
             self.logfp.write("get net %(code)s %(st)s - %(end)s\t"%{'code': self.lastcsvdata.loc[index, ['SYMBOL']]['SYMBOL'], 'st': start_day, 'end': end_day})
             self.get_stock_data(index, end_day)
-        self.lastcsvdata.loc[index, 'BEGINDAY'] = start_day.replace('-0', '/').replace('-', '/')
-        self.lastcsvdata.loc[index, 'ENDDAY']   = end_day.replace('-0', '/').replace('-', '/')
+        self.lastcsvdata.loc[index, 'BEGINDAY'] = start_day#.replace('-0', '/').replace('-', '/')
+        self.lastcsvdata.loc[index, 'ENDDAY']   = end_day#.replace('-0', '/').replace('-', '/')
         self.lastcsvdata.loc[index, 'QUERYDAY'] = today
         # print(self.lastcsvdata)
         return index
@@ -248,8 +300,10 @@ class getStockCsv(object):
                 self.logfp.write("lastfile no exists,  %(file)s at %(time)s\n"%{'file':self.lastcsvfile, 'time' : time.strftime("%H:%M:%S")})
                 self.lastcsvdata.to_csv(self.lastcsvfile, mode='w', encoding='gbk', index=0)#, header=False)
             self.lasttimedata = pd.read_csv(self.lastcsvfile, encoding='gbk')#, nrows=1)
-                # if( 'SYMBOL' in self.lasttimedata.com):
-                #     self.lasttimedata.set_index(['SYMBOL'], inplace=True)
+            for row in self.lasttimedata.iterrows():
+                print(row)
+                if()
+
         except pd.errors.EmptyDataError as e:
             print(e)
         except urllib.error.URLError as e:
