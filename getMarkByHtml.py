@@ -42,7 +42,7 @@ class getStockCsv(object):
         self.getMarket('A')
         # self.get_stock_update_last_time(1)
         # self.get_stock_update_process(1)
-        # self.task_loop(0, self.lastcsvdata.index.size)
+        self.task_loop(0, self.lastcsvdata.index.size)
 
     def is_trade_day(self, day):
         if(len(day) != 8):
@@ -128,16 +128,20 @@ class getStockCsv(object):
         return start_day, end_day 
 
     def date_formal(self, date):
-        if(date[4] == '/' or date[4] == '-'):
-            if(len(date) == 8):
-                date = date[:4] + '0' + date[5] + '0' + date[7]
-            elif(len(date) == 10):
-                date   = date.replace('/', '').replace('-', '')  
-            elif(date[6] == '/' or date[6] == '-' ):
-                date = date[:4] + '0' + date[5] + date[7:]
-            else:
-                date = date[:4] + date[5:7] + '0' + date[-1]
-        date = date[:4] + '-' + date[4:6] + '-' + date[6:]
+        date = str(date)
+        try:
+            if(date[4] == '/' or date[4] == '-'):
+                if(len(date) == 8):
+                    date = date[:4] + '0' + date[5] + '0' + date[7]
+                elif(len(date) == 10):
+                    date   = date.replace('/', '').replace('-', '')  
+                elif(date[6] == '/' or date[6] == '-' ):
+                    date = date[:4] + '0' + date[5] + date[7:]
+                else:
+                    date = date[:4] + date[5:7] + '0' + date[-1]
+            date = date[:4] + '-' + date[4:6] + '-' + date[6:]
+        except IndexError as e:
+            return date
         return date
             
 
@@ -293,16 +297,24 @@ class getStockCsv(object):
             self.lastcsvdata.insert(3, 'BEGINDAY', '')
             self.lastcsvdata.insert(4, 'ENDDAY', '')
             self.lastcsvdata.insert(5, 'QUERYDAY', '')
-            self.logfp.write("%(symbol)s \n"%{'symbol':self.lastcsvdata})
 
             self.lastcsvfile = self.csvdir + '\\last.csv'
             if(os.path.isfile(self.lastcsvfile) == False):
                 self.logfp.write("lastfile no exists,  %(file)s at %(time)s\n"%{'file':self.lastcsvfile, 'time' : time.strftime("%H:%M:%S")})
                 self.lastcsvdata.to_csv(self.lastcsvfile, mode='w', encoding='gbk', index=0)#, header=False)
             self.lasttimedata = pd.read_csv(self.lastcsvfile, encoding='gbk')#, nrows=1)
-            for row in self.lasttimedata.iterrows():
-                print(row)
-                if()
+            for index, row in self.lastcsvdata.iterrows():
+                timedata = self.lasttimedata[ self.lasttimedata['SYMBOL'] == int(self.lastcsvdata.loc[index, ['SYMBOL']]['SYMBOL']) ]
+                # print(timedata)
+                if(timedata.empty == False):
+                    row['BEGINDAY']     = self.date_formal(timedata.loc[index, 'BEGINDAY'])
+                    row['ENDDAY']       = self.date_formal(timedata.loc[index, 'ENDDAY'])
+                    row['QUERYDAY']     = self.date_formal(timedata.loc[index, 'QUERYDAY'])
+                # print(self.lastcsvdata.loc[ index ])
+            # print(self.lastcsvdata)
+            self.logfp.write("%(symbol)s \n"%{'symbol':self.lastcsvdata})
+            self.logfp.write("last csvdata time update at %(time)s\n"%{'time' : time.strftime("%H:%M:%S")})
+            self.logfp.flush()
 
         except pd.errors.EmptyDataError as e:
             print(e)
