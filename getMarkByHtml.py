@@ -95,8 +95,8 @@ class getStockCsv(object):
         self.logfp.flush()
 
     def get_stock_update_last_time(self, index):
-        start_day   = '2020-01-01'
-        end_day     = '2020-01-01'
+        start_day   = self.date_formal(self.lastcsvdata.loc[index, ['BEGINDAY']]['BEGINDAY'])
+        end_day     = self.date_formal(self.lastcsvdata.loc[index, ['ENDDAY']]['ENDDAY'])
         temp = 'http://quotes.money.163.com/trade/lsjysj_%(code)s.html'%{'code': self.lastcsvdata.loc[index, ['SYMBOL']]['SYMBOL']}
         # print(temp)
         self.logfp.write("\n%(url)s at %(time)s\t"%{'url' : temp, 'time' : time.strftime("%H:%M:%S")})
@@ -125,6 +125,7 @@ class getStockCsv(object):
             self.logfp.write("get_stock_update_last_time urllib.error.URLError\n")
         except socket.timeout as e:
             print (type(e) )
+        
         return start_day, end_day 
 
     def date_formal(self, date):
@@ -302,14 +303,16 @@ class getStockCsv(object):
             if(os.path.isfile(self.lastcsvfile) == False):
                 self.logfp.write("lastfile no exists,  %(file)s at %(time)s\n"%{'file':self.lastcsvfile, 'time' : time.strftime("%H:%M:%S")})
                 self.lastcsvdata.to_csv(self.lastcsvfile, mode='w', encoding='gbk', index=0)#, header=False)
-            self.lasttimedata = pd.read_csv(self.lastcsvfile, encoding='gbk')#, nrows=1)
-            for index, row in self.lastcsvdata.iterrows():
-                timedata = self.lasttimedata[ self.lasttimedata['SYMBOL'] == int(self.lastcsvdata.loc[index, ['SYMBOL']]['SYMBOL']) ]
-                # print(timedata)
-                if(timedata.empty == False):
-                    row['BEGINDAY']     = self.date_formal(timedata.loc[index, 'BEGINDAY'])
-                    row['ENDDAY']       = self.date_formal(timedata.loc[index, 'ENDDAY'])
-                    row['QUERYDAY']     = self.date_formal(timedata.loc[index, 'QUERYDAY'])
+                self.lasttimedata = pd.read_csv(self.lastcsvfile, encoding='gbk')#, nrows=1)
+            else:
+                self.lasttimedata = pd.read_csv(self.lastcsvfile, encoding='gbk')#, nrows=1)
+                for index, row in self.lastcsvdata.iterrows():
+                    timedata = self.lasttimedata[ self.lasttimedata['SYMBOL'] == int(self.lastcsvdata.loc[index, ['SYMBOL']]['SYMBOL']) ]
+                    # print(timedata)
+                    if(timedata.empty == False):
+                        row['BEGINDAY']     = self.date_formal(timedata.loc[index, 'BEGINDAY'])
+                        row['ENDDAY']       = self.date_formal(timedata.loc[index, 'ENDDAY'])
+                        row['QUERYDAY']     = self.date_formal(timedata.loc[index, 'QUERYDAY'])
                 # print(self.lastcsvdata.loc[ index ])
             # print(self.lastcsvdata)
             self.logfp.write("%(symbol)s \n"%{'symbol':self.lastcsvdata})
@@ -337,7 +340,7 @@ class getStockCsv(object):
         if(start >= end):
             self.task_close()
             return
-        pool = ThreadPoolExecutor(max_workers=32)
+        pool = ThreadPoolExecutor(max_workers=64)
         nowitem = 0
         allitem = end - start
         task_list = []
