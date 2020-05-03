@@ -425,6 +425,7 @@ class getStockCsv(object):
         self.logfp.write("%(symbol)s \n"%{'symbol':self.lastcsvdata})
         self.logfp.write("last csvdata time update at %(time)s\n"%{'time' : time.strftime("%H:%M:%S")})
         self.logfp.flush()
+        self.logfp.close()
 
 
 
