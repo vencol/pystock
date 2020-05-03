@@ -26,6 +26,7 @@ ALL_BEGIN_DATE = '20080101'
 class getStockCsv(object):
     
     logfp               = 0
+    logfpupdate         = 0
     lastcsvfile         = ''
     workdaydata         = pd.DataFrame()
     lastcsvdata         = pd.DataFrame()
@@ -43,8 +44,9 @@ class getStockCsv(object):
         # self.get_stock_update_last_time_bynet(1)
         # st, end =self.get_stock_update_last_time_byfile(0)
         # self.get_stock_data(0, end)
-        self.get_stock_update_process(0)
-        # self.task_loop(0, self.lastcsvdata.index.size)
+        # self.get_stock_update_process(0)
+        self.task_loop(0, self.lastcsvdata.index.size)
+        # self.task_loop(0, 5)
 
     def is_trade_day(self, day):
         if(len(day) != 8):
@@ -168,7 +170,7 @@ class getStockCsv(object):
         return date
             
 
-    # def get_stock_data(self, index, endsave):
+    def get_stock_data(self, index, endsave):
         needupdate = 1
         start = ALL_BEGIN_DATE
         code = self.lastcsvdata.loc[index, ['SYMBOL']]['SYMBOL']
@@ -257,40 +259,29 @@ class getStockCsv(object):
 
     def get_stock_update_process(self, index):
         need_update = 0
-        # start_day   = self.lastcsvdata.loc[index, 'BEGINDAY']
-        # end_day     = self.lastcsvdata.loc[index, 'ENDDAY']
         today = datetime.datetime.today().date().strftime("%Y-%m-%d")
-        # print(today)
-        # print(self.lastcsvdata.loc[index, ['SYMBOL']]['SYMBOL'])
         if(self.lasttimedata.empty):
             need_update = 1
         else:
-            timedata = self.lasttimedata[ self.lasttimedata['SYMBOL'] == int(self.lastcsvdata.loc[index, ['SYMBOL']]['SYMBOL']) ]
-            # print(timedata)
-            if(timedata.empty):
-                need_update = 1
-            else:
-                # print(self.date_formal(timedata.loc[index, 'QUERYDAY']), today)
-                if (pd.isnull(timedata.loc[index, 'BEGINDAY']) or pd.isnull(timedata.loc[index, 'ENDDAY']) or pd.isnull(timedata.loc[index, 'QUERYDAY'])):
+            start_day   = self.date_formal(self.lastcsvdata.loc[index]['BEGINDAY'])
+            end_day     = self.date_formal(self.lastcsvdata.loc[index]['ENDDAY'])
+            code = self.lastcsvdata.loc[index]['SYMBOL']
+            if(type(code) == type(1)):
+                code = "%(code)06d"%{'code':code}
+            csvdir = self.csvdir + "\\%(code)s.csv"%{'code': code}
+            if(os.path.isfile(csvdir)):
+                laststockdata = pd.read_csv(csvdir, encoding='gbk', nrows=1)
+                if(laststockdata.empty):
                     need_update = 1
                 else:
-                    start_day   = self.date_formal(timedata.loc[index, 'BEGINDAY'])
-                    end_day     = self.date_formal(timedata.loc[index, 'ENDDAY'])
-                    code = self.lastcsvdata.loc[index, ['SYMBOL']]['SYMBOL']
-                    if(type(code) == type(1)):
-                        code = "%(code)06d"%{'code':code}
-                    csvdir = self.csvdir + "\\%(code)s.csv"%{'code': code}
-                    if(os.path.isfile(csvdir)):
-                        laststockdata = pd.read_csv(csvdir, encoding='gbk', nrows=1)
-                        if(laststockdata.empty == False):
-                            if (end_day != self.date_formal(laststockdata.loc[0, '日期'])):
-                                need_update = 1
-                            else:
-                                if(self.date_formal(timedata.loc[index, 'QUERYDAY']) != today and self.is_trade_day( today )):
-                                    if(timedata['VOLUME'].empty == False):# and self.is_trade_day( today )):
-                                        need_update = 1
-                    else:
+                    if (end_day != self.date_formal(laststockdata.loc[0, '日期'])):
                         need_update = 1
+                    else:
+                        if(self.date_formal(self.lastcsvdata.loc[index]['QUERYDAY']) != today and self.is_trade_day( today )):
+                            if(self.lastcsvdata.loc[index]['VOLUME'] <= 0):# and self.is_trade_day( today )):
+                                need_update = 1
+            else:
+                need_update = 1
         if (need_update):
             # start_day, end_day = self.get_stock_update_last_time_bynet(index)
             start_day, end_day = self.get_stock_update_last_time_byfile(index)
@@ -345,6 +336,7 @@ class getStockCsv(object):
             # print(self.lastcsvdata)
             self.lastcsvfile = self.csvdir + '\\last.csv'
             if(os.path.isfile(self.lastcsvfile) == False):
+                self.logfpupdate = 1
                 self.logfp.write("lastfile no exists,  %(file)s at %(time)s\n"%{'file':self.lastcsvfile, 'time' : time.strftime("%H:%M:%S")})
                 self.lastcsvdata.to_csv(self.lastcsvfile, mode='w', encoding='gbk', index=0)#, header=False)
                 self.lasttimedata = pd.read_csv(self.lastcsvfile, encoding='gbk')#, nrows=1)
@@ -389,7 +381,8 @@ class getStockCsv(object):
             laststockdata = pd.read_csv(csvdir, encoding='gbk')#, nrows=1)
             if (laststockdata.empty == False):
                 if (laststockdata['日期'].empty == False):
-                    start = self.date_formal(laststockdata.loc[0, '日期'])  
+                    self.lastcsvdata.loc[index, 'BEGINDAY'] = self.date_formal(laststockdata.loc[laststockdata.index.size-1, '日期'])  
+                    self.lastcsvdata.loc[index, 'ENDDAY']   = self.date_formal(laststockdata.loc[0, '日期'])  
 
     def task_close(self):
         self.logfp.close()
@@ -412,9 +405,22 @@ class getStockCsv(object):
             
             if( nowitem % 50 == 0 ):
                 self.lastcsvdata.to_csv(self.lastcsvfile, mode='w', encoding='gbk', index=0)#, header=False)
-        #     logfp.write("%(all)s\t%(now)s\t%(per).05s%%\t%(time).05ss"%{'all': allitem, 'now' : nowitem, 'per' : 100*nowitem/allitem, 'time' : (time.time()-begintime)})
-        #     logfp.flush() 
         
+        nowitem = 0
+        allitem = end - start
+        task_list.clear()
+        if(self.logfpupdate):
+            for index in range (start, end, 1):
+                task_list.append(pool.submit(self.get_stock_time_update, index))
+        for f in as_completed(task_list):
+            f_ret = f.result()
+            nowitem += 1
+            print("updatetime\tall\tnow\tpercent\ttime(s)")
+            print("updatetime\t%(all)s\t%(now)s\t%(per).05s%%\t%(time).05ss\n"%{'all': allitem, 'now' : nowitem, 'per' : 100*nowitem/allitem, 'time' : (time.time()-self.begintime)})
+            
+            if( nowitem % 50 == 0 ):
+                self.lastcsvdata.to_csv(self.lastcsvfile, mode='w', encoding='gbk', index=0)#, header=False)
+
         self.lastcsvdata.to_csv(self.lastcsvfile, mode='w', encoding='gbk', index=0)#, header=False)
         self.logfp.write("%(symbol)s \n"%{'symbol':self.lastcsvdata})
         self.logfp.write("last csvdata time update at %(time)s\n"%{'time' : time.strftime("%H:%M:%S")})
