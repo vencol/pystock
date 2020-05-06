@@ -35,6 +35,7 @@ class getStockCsv(object):
     headers             = {'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:62.0) Gecko/2010010 Firefox/62.0'}
         
     def __init__(self, logname="log.txt"):
+        self.downflag  =0
         self.begintime = time.time()
         self.get_log_path(logname)
         if (os.path.exists(self.csvdir) == False):
@@ -171,10 +172,10 @@ class getStockCsv(object):
             
 
     def get_stock_data(self, index, endsave):
-        needupdate = 1
+        self.downflag = 255
         start = ALL_BEGIN_DATE
         code = self.lastcsvdata.loc[index, ['SYMBOL']]['SYMBOL']
-        if(type(code) == type(1)):
+        if(type(code) == type(1) or type(code) == type(1.0)):
             code = "%(code)06d"%{'code':code}
         csvdir = self.csvdir + "\\%(code)s.csv"%{'code': code}
         laststockdata = pd.DataFrame()
@@ -191,8 +192,15 @@ class getStockCsv(object):
         # print(start, endsave)
         self.logfp.write("save %(code)06s %(st)s - %(end)s\t"%{'code': code, 'st': start, 'end': end})
         self.logfp.flush() 
+
+        def getCsvCallback(numblock, blocksize, allsize):
+            # print(numblock, blocksize, allsize)
+            if(allsize and numblock * blocksize >= allsize):
+                self.downflag = 1
+
+
         if(endsave == start):
-            needupdate = 0
+            self.downflag = 0
         else:
             temp = "code=1%(code)06s&start=%(st)s&end=%(end)s"%{'code' : code, 'st' : start, 'end' : end}
             if(code[0] == '6'):
@@ -205,7 +213,7 @@ class getStockCsv(object):
             
             socket.setdefaulttimeout(60)
             try:
-                urllib.request.urlretrieve(temp, csvdir)#, getCsvCallback) 
+                urllib.request.urlretrieve(temp, csvdir, getCsvCallback) 
             except urllib.error.URLError as e:
                 if hasattr(e, 'code'):
                     print("e.code")
@@ -215,12 +223,12 @@ class getStockCsv(object):
                     print(e.reason)
                 self.logfp.write("%(stock)s urllib.error.URLError\n"%{'stock' : code})
                 self.logfp.flush() 
-                needupdate = 0
+                self.downflag = 0
             except socket.timeout:
                 count = 1
                 while count <= 5:
                     try:
-                        urllib.request.urlretrieve(temp, csvdir)#, getCsvCallback)                                              
+                        urllib.request.urlretrieve(temp, csvdir, getCsvCallback)                                              
                         break
                     except socket.timeout:
                         err_info = 'Reloading for %d time'%count if count == 1 else 'Reloading for %d times'%count
@@ -241,9 +249,12 @@ class getStockCsv(object):
                     print("download job failed!\n")
                     self.logfp.write("update %(stock)s download job failed\n"%{'stock' : code})
                     self.logfp.flush() 
-                needupdate = 0
-        if(needupdate):
-            # stockdata = pd.read_csv(csvdir, encoding='gbk')#, nrows=1)
+                self.downflag = 0
+
+        while(self.downflag == 255):
+            time.sleep(0.1)
+        if(self.downflag):
+            stockdata = pd.read_csv(csvdir, encoding='gbk')#, nrows=1)
             # print(stockdata)
             if (laststockdata.empty == False):
                 laststockdata.drop(0, inplace=True)

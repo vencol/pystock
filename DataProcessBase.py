@@ -5,10 +5,8 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, Executor, as_completed, wait, ALL_COMPLETED,FIRST_COMPLETED
-
 TEST_DATA_NUM   = 100
-TRAINING_EPOH   = 20
+TRAINING_EPOH   = 10
 STEPRATE        = 0.01
 
 class HandleStockData(object):
@@ -19,22 +17,10 @@ class HandleStockData(object):
             self.code = "%(code)06d"%{'code':code}
         else:
             self.code = code
-        
-        # pool = ThreadPoolExecutor(max_workers=4)
-        # task_list = []
-        for index in range (1, 5, 1):
-        #     task_list.append(pool.submit(self.train_data_func, index))
-            self.train_data_func(index)
-
-    def train_data_func(self, type):
-        if (type == 1 or type == 2 or type == 3 or type == 4):
-            self.type    = type
-            self.predata = self.read_stock_data()
-            pre, w, b = self.train_data_model()
-            self.sess.close()
-        else:
-            print('type error')
-
+        self.predata = self.read_stock_data()
+        pre, w, b = self.train_data_model()
+        # self.verify_data_model(pre)
+        self.sess.close()
     
     def read_stock_data(self):
         csvdir = self.csvdir + "\\%(code)s.csv"%{'code': self.code}
@@ -56,38 +42,13 @@ class HandleStockData(object):
                 #                             '涨跌额':'UPDOWNPRICE', '涨跌幅':'UPDOWNRANGE',
                 #                             '成交量':'VOLUME', '成交金额':'AMOUNT', 
                 #                             '总市值':'MARKETVALUE', '流通市值':'FLOW'},inplace=True) 
-                if (self.type == 1):
-                    stockdata.rename(columns={  '日期': 15, '换手率': 11, 
-                                                '开盘价': 0, 
-                                                '收盘价': 1, '前收盘': 2,
-                                                '最高价': 3, '最低价': 4, 
-                                                '成交量': 5, '成交金额': 6, 
-                                                '涨跌额': 7, '涨跌幅': 8,
-                                                '总市值':9, '流通市值': 10},inplace=True) 
-                elif (self.type == 2):
-                    stockdata.rename(columns={  '日期': 15, '换手率': 11, 
-                                                '开盘价': 1, 
-                                                '收盘价': 0, '前收盘': 2,
-                                                '最高价': 3, '最低价': 4, 
-                                                '成交量': 5, '成交金额': 6, 
-                                                '涨跌额': 7, '涨跌幅': 8,
-                                                '总市值':9, '流通市值': 10},inplace=True) 
-                elif (self.type == 3):
-                    stockdata.rename(columns={  '日期': 15, '换手率': 11, 
-                                                '开盘价': 3, 
-                                                '收盘价': 1, '前收盘': 2,
-                                                '最高价': 0, '最低价': 4, 
-                                                '成交量': 5, '成交金额': 6, 
-                                                '涨跌额': 7, '涨跌幅': 8,
-                                                '总市值':9, '流通市值': 10},inplace=True) 
-                elif (self.type == 4):
-                    stockdata.rename(columns={  '日期': 15, '换手率': 11, 
-                                                '开盘价': 4, 
-                                                '收盘价': 1, '前收盘': 2,
-                                                '最高价': 3, '最低价': 0, 
-                                                '成交量': 5, '成交金额': 6, 
-                                                '涨跌额': 7, '涨跌幅': 8,
-                                                '总市值':9, '流通市值': 10},inplace=True) 
+                stockdata.rename(columns={  '日期': 15, '换手率': 11, 
+                                            '开盘价': 1, 
+                                            '收盘价': 0, '前收盘': 2,
+                                            '最高价': 3, '最低价': 4, 
+                                            '成交量': 5, '成交金额': 6, 
+                                            '涨跌额': 7, '涨跌幅': 8,
+                                            '总市值':9, '流通市值': 10},inplace=True) 
 
                 stockdata = stockdata.sort_values(by=15, ascending=True).reset_index(drop=True, inplace=False)
                 stockdata.sort_index(axis=1, inplace=True)
@@ -151,10 +112,7 @@ class HandleStockData(object):
             wtemp = w.eval(session = self.sess)
             # print(ydata.shape[0])
             loss_avg = loss_sum / ydata.shape[0]
-            if (epoch > TRAINING_EPOH - 5):
-                print('epcoh=', epoch+1, 'loss=', loss_avg, 'b=', btemp)#, 'w=', wtemp)
-            else:
-                print('=')
+            print('epcoh=', epoch+1, 'loss=', loss_avg, 'b=', btemp)#, 'w=', wtemp)
 
         
         n = np.random.randint(TEST_DATA_NUM)
@@ -171,24 +129,17 @@ class HandleStockData(object):
             # ys = np.array(ys).reshape(1, 1)
             pre = self.sess.run(pred, feed_dict={x: xs})
             prearry.append(pre[0, 0])
-            # print("stocknum: %(date)s\tydata: %(y)f\tpre: %(pre)f"%{'date': self.predata[count, 12], 'y': ys, 'pre': pre})
+            print("stocknum: %(date)s\tydata: %(y)f\tpre: %(pre)f"%{'date': self.predata[count, 12], 'y': ys, 'pre': pre})
 
         xs = self.predata[self.predata.shape[0]-1, 1:12].astype('float32')
-        # print(xs)
+        print(xs)
         xs = xs.reshape(1, 11)
         # ys = np.array(ys).reshape(1, 1)
         pre = self.sess.run(pred, feed_dict={x: xs})
         # print(pred)
-        if (self.type == 1):
-            print("code: %(code)s 开盘价 pre: %(pre)f loss: %(loss)f"%{'code': self.code, 'pre': pre, 'loss': loss_avg})
-        elif (self.type == 2):
-            print("code: %(code)s 收盘价 pre: %(pre)f loss: %(loss)f"%{'code': self.code, 'pre': pre, 'loss': loss_avg})
-        elif (self.type == 3):
-            print("code: %(code)s 最高价 pre: %(pre)f loss: %(loss)f"%{'code': self.code, 'pre': pre, 'loss': loss_avg})
-        elif (self.type == 4):
-            print("code: %(code)s 最低价 pre: %(pre)f loss: %(loss)f"%{'code': self.code, 'pre': pre, 'loss': loss_avg})
+        print("pre: %(pre)f"%{ 'pre': pre})
 
-        # self.plot_data(ydata, prearry, hdata)
+        self.plot_data(ydata, prearry, hdata)
         return pred, wtemp, btemp
 
     def plot_data(self, y, pre, high):
@@ -198,9 +149,9 @@ class HandleStockData(object):
         # print(pre, len(pre))
         # print(y, len(y))
         # print(high, len(high))
-        plt.plot(x, y, 'r', label='LowPrice')
-        plt.plot(x, pre, 'g', label='Prelow')
-        plt.plot(x, high, 'b', label='HighPrice')
+        plt.plot(x, y, 'r', label='实际最低价')
+        plt.plot(x, pre, 'g', label='预测最低价')
+        plt.plot(x, high, 'b', label='实际最高价')
         plt.legend()
         plt.show()
 
@@ -226,4 +177,4 @@ class HandleStockData(object):
 
 if __name__ == '__main__': 
     # handleCsv = HandleStockData(688396)
-    handleCsv = HandleStockData(600410)
+    handleCsv = HandleStockData(1)
