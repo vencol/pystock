@@ -154,7 +154,7 @@ class HandleStockData(object):
             if (epoch > TRAINING_EPOH - 5):
                 print('epcoh=', epoch+1, 'loss=', loss_avg, 'b=', btemp)#, 'w=', wtemp)
             else:
-                print('=')
+                print('=', end='')
 
         
         n = np.random.randint(TEST_DATA_NUM)
@@ -226,4 +226,4 @@ class HandleStockData(object):
 
 if __name__ == '__main__': 
     # handleCsv = HandleStockData(688396)
-    handleCsv = HandleStockData(600410)
+    handleCsv = HandleStockData(2402)

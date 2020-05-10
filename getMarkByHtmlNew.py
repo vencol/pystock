@@ -9,6 +9,7 @@ import socket
 import urllib
 import urllib.error
 import urllib.request
+from io import StringIO
 from bs4 import BeautifulSoup
 
 import numpy as np
@@ -35,7 +36,6 @@ class getStockCsv(object):
     headers             = {'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:62.0) Gecko/2010010 Firefox/62.0'}
         
     def __init__(self, logname="log.txt"):
-        self.downflag  =0
         self.begintime = time.time()
         self.get_log_path(logname)
         if (os.path.exists(self.csvdir) == False):
@@ -103,18 +103,19 @@ class getStockCsv(object):
         code = self.lastcsvdata.loc[index, ['SYMBOL']]['SYMBOL']
         csvdir = self.csvdir + "\\%(code)s.csv"%{'code': code}
         if(os.path.isfile(csvdir)):
-            laststockdata = pd.read_csv(csvdir, encoding='gbk', nrows=1)
+            laststockdata = pd.read_csv(csvdir, encoding='gbk')#, nrows=1)
             if(laststockdata.empty == False):
                 start_day = self.date_formal(laststockdata.loc[0, '日期'])
+                end_day   = self.date_formal(laststockdata.tail(1)['日期'].values[0])
             else:
-                start_day = '2008-01-01'
+                start_day   = '2008-01-01'
+                end_day     = '2008-01-02'
             # print(start_day)
         else:
-            if(self.lastcsvdata.loc[index, ['BEGINDAY']]['BEGINDAY']):
-                start_day   = self.date_formal(self.lastcsvdata.loc[index, ['BEGINDAY']]['BEGINDAY'])
-            else:
-                start_day = '2008-01-01'
-        end_day = datetime.datetime.today().date().strftime("%Y-%m-%d")
+            start_day   = '2008-01-01'
+            end_day     = '2008-01-02'
+        
+        # end_day = datetime.datetime.today().date().strftime("%Y-%m-%d")
             # if (laststockdata.empty == False):
             #     if (laststockdata['日期'].empty == False):
         return start_day, end_day 
@@ -172,7 +173,7 @@ class getStockCsv(object):
             
 
     def get_stock_data(self, index, endsave):
-        self.downflag = 255
+        downflag = [255]
         start = ALL_BEGIN_DATE
         code = self.lastcsvdata.loc[index, ['SYMBOL']]['SYMBOL']
         if(type(code) == type(1) or type(code) == type(1.0)):
@@ -195,12 +196,12 @@ class getStockCsv(object):
 
         def getCsvCallback(numblock, blocksize, allsize):
             # print(numblock, blocksize, allsize)
-            if(allsize and numblock * blocksize >= allsize):
-                self.downflag = 1
+            if(numblock * blocksize > allsize):
+                downflag[0] = 1
 
-
+        # print(downflag[0])
         if(endsave == start):
-            self.downflag = 0
+            downflag[0] = 0
         else:
             temp = "code=1%(code)06s&start=%(st)s&end=%(end)s"%{'code' : code, 'st' : start, 'end' : end}
             if(code[0] == '6'):
@@ -211,9 +212,17 @@ class getStockCsv(object):
             self.logfp.write("\n%(url)s at %(time)s\n"%{'url' : temp, 'time' : time.strftime("%H:%M:%S")})
             self.logfp.flush()
             
-            socket.setdefaulttimeout(60)
             try:
-                urllib.request.urlretrieve(temp, csvdir, getCsvCallback) 
+                count = 0
+                while(count < 5):
+                    dataFile = StringIO(urllib.request.urlopen(temp, timeout=60).read().decode('gbk','ignore'))
+                    stockdata = pd.read_csv(dataFile)#, encoding='gbk')#, nrows=1)
+                    if(stockdata.empty):
+                        # urllib.request.urlcleanup
+                        count += 1
+                    else:
+                        downflag[0] = 1
+                        break
             except urllib.error.URLError as e:
                 if hasattr(e, 'code'):
                     print("e.code")
@@ -223,48 +232,101 @@ class getStockCsv(object):
                     print(e.reason)
                 self.logfp.write("%(stock)s urllib.error.URLError\n"%{'stock' : code})
                 self.logfp.flush() 
-                self.downflag = 0
+                downflag[0] = 0
             except socket.timeout:
-                count = 1
-                while count <= 5:
-                    try:
-                        urllib.request.urlretrieve(temp, csvdir, getCsvCallback)                                              
-                        break
-                    except socket.timeout:
-                        err_info = 'Reloading for %d time'%count if count == 1 else 'Reloading for %d times'%count
-                        print(err_info)
-                        self.logfp.write("update %(stock)s timeout count %(err)s\n"%{'stock' : code, 'err' : err_info})
-                        self.logfp.flush() 
-                        count += 1
-                    except urllib.error.URLError as e:
-                        if hasattr(e, 'code'):
-                            print("e.code")
-                            print(e.code)
-                        elif hasattr(e, 'reason'):
-                            print("e.reason")
-                            print(e.reason)
-                        self.logfp.write("%(stock)s urllib.error.URLError\n"%{'stock' : code})
-                        self.logfp.flush() 
-                if count > 5:
-                    print("download job failed!\n")
-                    self.logfp.write("update %(stock)s download job failed\n"%{'stock' : code})
-                    self.logfp.flush() 
-                self.downflag = 0
+                self.logfp.write("%(stock)s timeout.error\n"%{'stock' : code})
+                self.logfp.flush() 
+                downflag[0] = 0
 
-        while(self.downflag == 255):
-            time.sleep(0.1)
-        if(self.downflag):
-            stockdata = pd.read_csv(csvdir, encoding='gbk')#, nrows=1)
+
+        if(downflag[0]):
+            self.logfp.write("successtodownload %(stock)s download job\n"%{'stock' : code})
+            # stockdata = pd.read_csv(csvdir + 't', encoding='gbk')#, nrows=1)
             # print(stockdata)
             if (laststockdata.empty == False):
                 laststockdata.drop(0, inplace=True)
                 stockdata = stockdata.append(laststockdata)
-                stockdata.to_csv(csvdir, mode='w', encoding='gbk', index=0)#, header=False)
-                start   = self.date_formal(stockdata.loc[stockdata.index.size-1, '日期'])
-                end     = self.date_formal(stockdata.loc[0, '日期'])
+            else:
+                self.logfp.write("noneedupdate %(stock)s download job\n"%{'stock' : code})
+            stockdata.to_csv(csvdir, mode='w', encoding='gbk', index=0)#, header=False)
+            if(stockdata.index.size):
+                start   = self.date_formal(stockdata.tail(1)['日期'].values[0])
+                end     = self.date_formal(stockdata.loc[0]['日期'])
+            else:
+                self.logfp.write("downloadnone %(stock)s download job\n"%{'stock' : code})
+                start = start[:4] + '-' + start[4:6] + '-' + start[6:]
+                end = endsave[:4] + '-' + endsave[4:6] + '-' + endsave[6:]
         else:
+            self.logfp.write("noneedtodownload %(stock)s download job\n"%{'stock' : code})
             start = start[:4] + '-' + start[4:6] + '-' + start[6:]
             end = endsave[:4] + '-' + endsave[4:6] + '-' + endsave[6:]
+
+            # socket.setdefaulttimeout(60)
+            # try:
+            #     urllib.request.urlretrieve(temp, csvdir + 't', getCsvCallback) 
+            # except urllib.error.URLError as e:
+            #     if hasattr(e, 'code'):
+            #         print("e.code")
+            #         print(e.code)
+            #     elif hasattr(e, 'reason'):
+            #         print("e.reason")
+            #         print(e.reason)
+            #     self.logfp.write("%(stock)s urllib.error.URLError\n"%{'stock' : code})
+            #     self.logfp.flush() 
+            #     downflag[0] = 0
+            # except socket.timeout:
+            #     socket.setdefaulttimeout(60)
+            #     try:
+            #         urllib.request.urlretrieve(temp, csvdir + 't', getCsvCallback) 
+            #     except urllib.error.URLError as e:
+            #         if hasattr(e, 'code'):
+            #             print("e.code")
+            #             print(e.code)
+            #         elif hasattr(e, 'reason'):
+            #             print("e.reason")
+            #             print(e.reason)
+            #         self.logfp.write("%(stock)s urllib.error.URLError\n"%{'stock' : code})
+            #         self.logfp.flush() 
+            #         downflag[0] = 0
+            #     except socket.timeout:
+            #         socket.setdefaulttimeout(60)
+            #         try:
+            #             urllib.request.urlretrieve(temp, csvdir + 't', getCsvCallback) 
+            #         except urllib.error.URLError as e:
+            #             if hasattr(e, 'code'):
+            #                 print("e.code")
+            #                 print(e.code)
+            #             elif hasattr(e, 'reason'):
+            #                 print("e.reason")
+            #                 print(e.reason)
+            #             self.logfp.write("%(stock)s urllib.error.URLError\n"%{'stock' : code})
+            #             self.logfp.flush() 
+            #             downflag[0] = 0
+            #         except socket.timeout:
+            #             self.logfp.write("%(stock)s timeout.error\n"%{'stock' : code})
+            #             self.logfp.flush() 
+            #             downflag[0] = 0
+
+        # while(downflag[0] == 255):
+        #     time.sleep(1)
+
+        # if(downflag[0]):
+        #     self.logfp.write("successtodownload %(stock)s download job\n"%{'stock' : code})
+        #     stockdata = pd.read_csv(csvdir + 't', encoding='gbk')#, nrows=1)
+        #     # print(stockdata)
+        #     if (laststockdata.empty == False):
+        #         laststockdata.drop(0, inplace=True)
+        #         stockdata = stockdata.append(laststockdata)
+        #         os.remove(csvdir + 't')
+        #     else:
+        #         self.logfp.write("faildownload %(stock)s download job\n"%{'stock' : code})
+            # stockdata.to_csv(csvdir, mode='w', encoding='gbk', index=0)#, header=False)
+            # start   = self.date_formal(stockdata.tail(1)['日期'].values[0])
+            # end     = self.date_formal(stockdata[0]['日期'])
+        # else:
+        #     self.logfp.write("noneedtodownload %(stock)s download job\n"%{'stock' : code})
+        #     start = start[:4] + '-' + start[4:6] + '-' + start[6:]
+        #     end = endsave[:4] + '-' + endsave[4:6] + '-' + endsave[6:]
         return start, end
 
 
@@ -280,7 +342,7 @@ class getStockCsv(object):
             if(type(code) == type(1)):
                 code = "%(code)06d"%{'code':code}
             csvdir = self.csvdir + "\\%(code)s.csv"%{'code': code}
-            if(os.path.isfile(csvdir)):
+            if(os.path.isfile(csvdir) and os.path.getsize(csvdir) > 4096):
                 laststockdata = pd.read_csv(csvdir, encoding='gbk', nrows=1)
                 if(laststockdata.empty):
                     need_update = 1
@@ -392,7 +454,7 @@ class getStockCsv(object):
             laststockdata = pd.read_csv(csvdir, encoding='gbk')#, nrows=1)
             if (laststockdata.empty == False):
                 if (laststockdata['日期'].empty == False):
-                    self.lastcsvdata.loc[index, 'BEGINDAY'] = self.date_formal(laststockdata.loc[laststockdata.index.size-1, '日期'])  
+                    self.lastcsvdata.loc[index, 'BEGINDAY'] = self.date_formal(laststockdata.tail(1)['日期'].values[0])  
                     self.lastcsvdata.loc[index, 'ENDDAY']   = self.date_formal(laststockdata.loc[0, '日期'])  
 
     def task_close(self):
@@ -414,23 +476,23 @@ class getStockCsv(object):
             print("all\tnow\tpercent\ttime(s)")
             print("%(all)s\t%(now)s\t%(per).05s%%\t%(time).05ss\n"%{'all': allitem, 'now' : nowitem, 'per' : 100*nowitem/allitem, 'time' : (time.time()-self.begintime)})
             
-            if( nowitem % 50 == 0 ):
+            if( nowitem % 100 == 0 ):
                 self.lastcsvdata.to_csv(self.lastcsvfile, mode='w', encoding='gbk', index=0)#, header=False)
         
-        nowitem = 0
-        allitem = end - start
-        task_list.clear()
-        if(self.logfpupdate):
-            for index in range (start, end, 1):
-                task_list.append(pool.submit(self.get_stock_time_update, index))
-        for f in as_completed(task_list):
-            f_ret = f.result()
-            nowitem += 1
-            print("updatetime\tall\tnow\tpercent\ttime(s)")
-            print("updatetime\t%(all)s\t%(now)s\t%(per).05s%%\t%(time).05ss\n"%{'all': allitem, 'now' : nowitem, 'per' : 100*nowitem/allitem, 'time' : (time.time()-self.begintime)})
+        # nowitem = 0
+        # allitem = end - start
+        # task_list.clear()
+        # if(self.logfpupdate):
+        #     for index in range (start, end, 1):
+        #         task_list.append(pool.submit(self.get_stock_time_update, index))
+        # for f in as_completed(task_list):
+        #     f_ret = f.result()
+        #     nowitem += 1
+        #     print("updatetime\tall\tnow\tpercent\ttime(s)")
+        #     print("updatetime\t%(all)s\t%(now)s\t%(per).05s%%\t%(time).05ss\n"%{'all': allitem, 'now' : nowitem, 'per' : 100*nowitem/allitem, 'time' : (time.time()-self.begintime)})
             
-            if( nowitem % 50 == 0 ):
-                self.lastcsvdata.to_csv(self.lastcsvfile, mode='w', encoding='gbk', index=0)#, header=False)
+        #     if( nowitem % 50 == 0 ):
+        #         self.lastcsvdata.to_csv(self.lastcsvfile, mode='w', encoding='gbk', index=0)#, header=False)
 
         self.lastcsvdata.to_csv(self.lastcsvfile, mode='w', encoding='gbk', index=0)#, header=False)
         self.logfp.write("%(symbol)s \n"%{'symbol':self.lastcsvdata})
