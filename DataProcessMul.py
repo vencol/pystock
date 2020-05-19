@@ -3,22 +3,28 @@
 import os
 import numpy as np
 import pandas as pd
+import tensorboard
 import tensorflow as tf
 
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, Executor, as_completed, wait, ALL_COMPLETED,FIRST_COMPLETED
 
 TEST_DATA_NUM   = 100
-TRAINING_EPOH   = 20
+TRAINING_EPOH   = 1
 STEPRATE        = 0.01
 
 class HandleStockData(object):
     csvdir              = os.path.dirname(os.path.abspath(__file__)) + '\\csv'
+    tsbdir              = os.path.dirname(os.path.abspath(__file__)) + '\\tsblog'
 
     def __init__(self, code):
         if(type(code) == type(1)):
             self.code = "%(code)06d"%{'code':code}
         else:
             self.code = code
+            
+        if (os.path.exists(self.tsbdir) == False):
+            os.makedirs(self.tsbdir)
+        
         
         # pool = ThreadPoolExecutor(max_workers=4)
         # task_list = []
@@ -111,7 +117,7 @@ class HandleStockData(object):
                 #     stockdata[1:,13] = (stockdata[1:,1] - stockdata[:-1,1]) / stockdata[:-1,1]
                 # print(stockdata)
                 self.stockdorgata = stockdata.copy()
-                for i in range (1, 12):
+                for i in range (0, 12):
                     stockdata[:,i] = (stockdata[:,i] - stockdata[:,i].min()) / (stockdata[:,i].max() - stockdata[:,i].min())
                 # print(stockdata)
                 # print(stockdata[:, ])
@@ -121,7 +127,7 @@ class HandleStockData(object):
         
     def pre_data_model(self, x):
         with tf.name_scope('Model'):
-            w = tf.Variable(tf.random.normal([11, 1], stddev=0.01), name='W')
+            w = tf.Variable(tf.random.normal([12, 1], stddev=0.01), name='W')
             b = tf.Variable(1.0, name='B')
             def base_model(x, w, b):
                 return tf.matmul(x, w) + b
@@ -129,12 +135,12 @@ class HandleStockData(object):
             return pred, w, b
             
     def train_data_model(self):
-        xdata = self.predata[ :self.predata.shape[0]-TEST_DATA_NUM, 1:12].astype('float32')
-        ydata = self.predata[1 : self.predata.shape[0]-TEST_DATA_NUM+1, 0].astype('float32')
+        xdata = self.predata[ :self.predata.shape[0]-TEST_DATA_NUM, 0:12].astype('float32')
+        ydata = self.stockdorgata[1 : self.predata.shape[0]-TEST_DATA_NUM+1, 0].astype('float32')
         # print(xdata , "\nshape:" , xdata.shape)
         # print(ydata , "\nshape:" , ydata.shape)
         tf.compat.v1.disable_eager_execution()
-        x = tf.compat.v1.placeholder(tf.float32, [None, 11], name='X')
+        x = tf.compat.v1.placeholder(tf.float32, [None, 12], name='X')
         y = tf.compat.v1.placeholder(tf.float32, [None, 1], name='Y')
 
         pred, w, b= self.pre_data_model(x)
@@ -146,12 +152,18 @@ class HandleStockData(object):
         self.sess.run(init)
         # print(xdata)
         # print(ydata)
+        loss_list = []
+        tsbwriter = tf.summary.create_file_writer(self.tsbdir)
+        tsbloss_op = tf.summary.scalar('loss', lossfunc)
         for epoch in range(0, TRAINING_EPOH):
             loss_sum = 0.0
             for xs, ys in zip(xdata, ydata):
-                xs = xs.reshape(1, 11)
+                xs = xs.reshape(1, 12)
                 ys = np.array(ys).reshape(1, 1)
-                _, loss = self.sess.run([optimizer, lossfunc], feed_dict={x: xs, y: ys})
+                _, summary_str, loss = self.sess.run([optimizer, tsbloss_op, lossfunc], feed_dict={x: xs, y: ys})
+                # tsbwriter.add_summary(summary_str, epoch)
+                tsbwriter.flush()
+                # tf.summary.record_if(1)
                 loss_sum = loss_sum + loss
 
             # indices = tf.range(start=0, limit=tf.shape(xdata)[0], dtype=tf.int32)
@@ -167,6 +179,7 @@ class HandleStockData(object):
             wtemp = w.eval(session = self.sess)
             # print(ydata.shape[0])
             loss_avg = loss_sum / ydata.shape[0]
+            loss_list.append(loss_avg)
             if (epoch > TRAINING_EPOH - 5):
                 print('epcoh=', epoch+1, 'loss=', loss_avg, 'b=', btemp)#, 'w=', wtemp)
             else:
@@ -174,8 +187,8 @@ class HandleStockData(object):
 
         
         n = np.random.randint(TEST_DATA_NUM)
-        xdata = self.predata[self.predata.shape[0]-n : self.predata.shape[0]-1, 1:12].astype('float32')
-        ydata = self.predata[self.predata.shape[0]-n+1 : self.predata.shape[0], 0].astype('float32')
+        xdata = self.predata[self.predata.shape[0]-n : self.predata.shape[0]-1, 0:12].astype('float32')
+        ydata = self.stockdorgata[self.predata.shape[0]-n+1 : self.predata.shape[0], 0].astype('float32')
         hdata = self.stockdorgata[self.predata.shape[0]-n+1 : self.predata.shape[0], 3].astype('float32')
         # print(ydata)
         # print(hdata)
@@ -183,15 +196,15 @@ class HandleStockData(object):
         prearry=[]
         for xs, ys in zip(xdata, ydata):
             count = count + 1
-            xs = xs.reshape(1, 11)
+            xs = xs.reshape(1, 12)
             # ys = np.array(ys).reshape(1, 1)
             pre = self.sess.run(pred, feed_dict={x: xs})
             prearry.append(pre[0, 0])
             # print("stocknum: %(date)s\tydata: %(y)f\tpre: %(pre)f"%{'date': self.predata[count, 12], 'y': ys, 'pre': pre})
 
-        xs = self.predata[self.predata.shape[0]-1, 1:12].astype('float32')
+        xs = self.predata[self.predata.shape[0]-1, 0:12].astype('float32')
         # print(xs)
-        xs = xs.reshape(1, 11)
+        xs = xs.reshape(1, 12)
         # ys = np.array(ys).reshape(1, 1)
         pre = self.sess.run(pred, feed_dict={x: xs})
         # print(pred)
@@ -201,6 +214,7 @@ class HandleStockData(object):
             print("code: %(code)s 收盘价 pre: %(pre)f loss: %(loss)f"%{'code': self.code, 'pre': pre, 'loss': loss_avg})
             
             print(prearry)
+            self.plot_data(ydata, prearry, hdata)
             prearry.append(pre)
             prearry = np.array(prearry)
             prearry[1:] = 100 * (prearry[1:] - prearry[:-1]) / prearry[:-1]
@@ -212,7 +226,6 @@ class HandleStockData(object):
         elif (self.type == 5):
             print("code: %(code)s 涨跌幅 pre: %(pre)f loss: %(loss)f"%{'code': self.code, 'pre': pre, 'loss': loss_avg})
 
-        # self.plot_data(ydata, prearry, hdata)
         return pred, wtemp, btemp
 
     def plot_data(self, y, pre, high):

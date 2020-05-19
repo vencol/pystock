@@ -1,5 +1,6 @@
 *.txt
 csv
-acsvdata
+tsblog
+model
 pyqt/__pycache__
 pyqt/*.txt

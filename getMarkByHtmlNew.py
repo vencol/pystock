@@ -181,10 +181,14 @@ class getStockCsv(object):
         csvdir = self.csvdir + "\\%(code)s.csv"%{'code': code}
         laststockdata = pd.DataFrame()
         if(os.path.isfile(csvdir)):
-            laststockdata = pd.read_csv(csvdir, encoding='gbk')#, nrows=1)
-            if (laststockdata.empty == False):
-                if (laststockdata['日期'].empty == False):
-                    start = self.date_formal(laststockdata.loc[0, '日期'])   
+            try:
+                laststockdata = pd.read_csv(csvdir, encoding='gbk')#, nrows=1)
+                if (laststockdata.empty == False):
+                    if (laststockdata['日期'].empty == False):
+                        start = self.date_formal(laststockdata.loc[0, '日期'])   
+            except pd.errors.EmptyDataError as e: 
+                self.logfp.write("\n%(code)s EmptyDataError at %(time)s\n"%{'code' : code, 'time' : time.strftime("%H:%M:%S")})
+                self.logfp.flush()
         # start = '2020/18/19'
         start   = self.date_formal(start)
         start   = start.replace('-0', '0').replace('-', '')
