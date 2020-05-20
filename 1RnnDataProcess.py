@@ -11,6 +11,8 @@ INPUT_TENSOR_SHAPE_LEN   = 12
 RNN_CELLSIZE = 10
 BATCHSIZE = 13
 TRAINING_EPOH   = 50
+DAYTIME = 5
+DAYOFF = 1
 
 MODELDIR = os.path.dirname(os.path.abspath(__file__)) + "\\model"
 if (os.path.exists(MODELDIR) == False):
@@ -53,33 +55,45 @@ def preProcessCsvData(csvdata, type=0):
         csvdata.reset_index(drop=True, inplace=True)
         # print(csvdata.head(20))
         csvdata.sort_index(axis=1, inplace=True)
-        csvdata.drop(index=[0], inplace=True)      
+        # print(csvdata)
+        # print(csvdata.loc[:,0])
+        # csvdata.drop(index=[0], inplace=True)  #delete 2008/1/2 
+        csvdata.insert(INPUT_TENSOR_SHAPE_LEN + 1, 12, 0)
+        # print(csvdata)
         csvdata = csvdata.values
         csvdata = np.array(csvdata)
         # self.stockdorgata = csvdata.copy()
-        predata = csvdata[:,0].copy()
-        # print(predata)
-        for i in range (0, 12):
+        predata = csvdata[:,[0,13]].copy()
+        # csvdata = np.delete(csvdata, [0], axis=1)
+        # print(csvdata)
+        for i in range (DAYTIME, csvdata.shape[0]):
+            # print(csvdata[i])
+            csvdata[i, INPUT_TENSOR_SHAPE_LEN] = csvdata[i,0]
+            for j in range (0, DAYTIME):
+                # print(csvdata[i, 13])
+                csvdata[i, INPUT_TENSOR_SHAPE_LEN] = csvdata[i, INPUT_TENSOR_SHAPE_LEN] + csvdata[i - j - 1, 0]
+            csvdata[i, INPUT_TENSOR_SHAPE_LEN] = csvdata[i, INPUT_TENSOR_SHAPE_LEN] / DAYTIME
+        # print(csvdata)
+        for i in range (0, INPUT_TENSOR_SHAPE_LEN):
             csvdata[:,i] = (csvdata[:,i] - csvdata[:,i].min()) / (csvdata[:,i].max() - csvdata[:,i].min())
     else:
         print('there is not stock data csv data')
         os._exit(-1)
     # print(predata)
-    
     xdata = csvdata[ : , 0:INPUT_TENSOR_SHAPE_LEN].astype('float32')
-    ydata = predata[ : ].astype('float32')
+    # ydata = predata[ : ].astype('float32')
     # xdata = csvdata[ :predata.shape[0]-TEST_DATA_NUM, 0:INPUT_TENSOR_SHAPE_LEN].astype('float32')
     # ydata = predata[1 : predata.shape[0]-TEST_DATA_NUM+1].astype('float32')
     # xdata = xdata.reshape(predata.shape[0]-TEST_DATA_NUM, INPUT_TENSOR_SHAPE_LEN)
     # ydata = ydata.reshape(predata.shape[0]-TEST_DATA_NUM, 1)
-    print('total:', predata.shape, 'x shape:', xdata.shape, 'y shape: ', ydata.shape)
-    return xdata, ydata
+    print('total:', predata.shape, 'x shape:', xdata.shape, 'y shape: ', predata.shape)
+    return xdata, predata
 
 def trainCsvData(xdata, ydata, code):
     if(type(code) == type(1)):
         code = "%(code)06d"%{'code':code}
     xdata = xdata[ :ydata.shape[0]-TEST_DATA_NUM, 0:INPUT_TENSOR_SHAPE_LEN]
-    ydata = ydata[1 : ydata.shape[0]-TEST_DATA_NUM+1]
+    ydata = ydata[DAYOFF : ydata.shape[0]-TEST_DATA_NUM+DAYOFF, 0].astype('float32')
 
     print(xdata[0, 0:INPUT_TENSOR_SHAPE_LEN].shape)
     model_layers = [
@@ -100,22 +114,39 @@ def trainCsvData(xdata, ydata, code):
 def verifyCsvData(xdata, ydata, code):
     if(type(code) == type(1)):
         code = "%(code)06d"%{'code':code}
-    xdata = xdata[ydata.shape[0]-TEST_DATA_NUM : ydata.shape[0]-1, 0:INPUT_TENSOR_SHAPE_LEN]
-    ydata = ydata[ydata.shape[0]-TEST_DATA_NUM+1 : ydata.shape[0]]
+    xdata = xdata[ydata.shape[0]-TEST_DATA_NUM : ydata.shape[0]-DAYOFF, 0:INPUT_TENSOR_SHAPE_LEN]
+    ydata = ydata[ydata.shape[0]-TEST_DATA_NUM+DAYOFF : ydata.shape[0]]
+    # print(ydata[0])
     # xdata = xdata.reshape(predata.shape[0]-TEST_DATA_NUM, INPUT_TENSOR_SHAPE_LEN)
     # ydata = ydata.reshape(predata.shape[0]-TEST_DATA_NUM, 1)
     model = tf.keras.models.load_model(MODELDIR + '\\%(code)s.h5'%{'code': code})
     predict = []
-    for i in range(TEST_DATA_NUM - 1):
-        x_train = xdata[i, 0:INPUT_TENSOR_SHAPE_LEN].reshape(1,12)
+    for i in range(TEST_DATA_NUM - DAYOFF):
+        x_train = xdata[i, 0:INPUT_TENSOR_SHAPE_LEN].reshape(1,INPUT_TENSOR_SHAPE_LEN)
         one_predict = model.predict(x_train)[0][0]
         predict.append(one_predict) 
     print("pre is :", predict)
-    print("real is :", ydata)
+    print("real is :", ydata[:,0])
     
-    x = range(1, TEST_DATA_NUM, 1)
-    plt.plot(x, ydata, 'r', label='LowPrice')
-    plt.plot(x, predict, 'g', label='Prelow')
+    x = range(1, TEST_DATA_NUM + 1 - DAYOFF, 1)
+    plt.figure(1)
+    plt.subplot(121)
+    plt.plot(x, ydata[:,0], 'r', label='ydtat')
+    plt.plot(x, predict, 'g', label='predata')
+    plt.ylim(ydata[:,0].min() - 1, ydata[:,0].max() + 1)
+    plt.legend()
+    plt.subplot(122)
+    offset = (ydata[:,0].min() + ydata[:,0].max())/2
+    predict[:] = predict[:] - ydata[:,0]
+    plt.plot(x, predict, 'b', label='offset=pre-ydata')
+    zeoroff = np.zeros_like(predict)
+    plt.plot(x, zeoroff, 'r', label='zerooffset')
+    zeoroff = np.array(zeoroff)
+    zeoroff[:] = zeoroff[:] + max(predict)
+    plt.plot(x, zeoroff, 'g', label='maxoffset')
+    zeoroff[:] = zeoroff[:] - max(predict) + min(predict)
+    plt.plot(x, zeoroff, 'g', label='minoffset')
+    plt.ylim(ydata[:,0].min() - 1 - offset, ydata[:,0].max() + 1 -offset )
     plt.legend()
     plt.show()
 
@@ -128,4 +159,4 @@ def oneCodeRnn(code):
 if __name__ == '__main__': 
     # handleCsv = HandleStockData(688396)
     # handleCsv = HandleStockData(2402)
-    oneCodeRnn(2402)
+    oneCodeRnn(600410)
