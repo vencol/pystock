@@ -8,9 +8,9 @@ import matplotlib.pyplot as plt
 
 TEST_DATA_NUM   = 50
 INPUT_TENSOR_SHAPE_LEN   = 12
-RNN_CELLSIZE = 10
+RNN_CELLSIZE = 5
 BATCHSIZE = 13
-TRAINING_EPOH   = 50
+TRAINING_EPOH   = 100
 DAYTIME = 5
 DAYOFF = 1
 
@@ -34,7 +34,7 @@ def getCsvData(code):
 def preProcessCsvTaget(csvdata, type=0):
     csvdict = {'开盘价': 0, '收盘价': 1, '前收盘': 2, '最高价': 3, '最低价': 4, 
                 '成交量': 5, '成交金额': 6, '涨跌额': 7, '涨跌幅': 8, '换手率': 9,
-                '总市值':10, '流通市值': 11, '日期': 15}
+                '总市值':10, '流通市值': 11}
     if(type < 5):
         csvdictkey = [k for k,v in csvdict.items() if v==type]
         csvdict[csvdictkey[0]] = 0
@@ -51,21 +51,16 @@ def preProcessCsvData(csvdata, type=0):
         csvdata[ ['涨跌额', '涨跌幅'] ] = csvdata[ ['涨跌额', '涨跌幅'] ].astype('float32') 
         preProcessCsvTaget(csvdata, type)
         # csvdata = csvdata.sort_values(by=15, ascending=True).reset_index(drop=True, inplace=False)
-        csvdata.sort_index(ascending=False, inplace=True)
-        csvdata.reset_index(drop=True, inplace=True)
-        # print(csvdata.head(20))
+        csvdata['日期']=pd.to_datetime(csvdata['日期'])
+        csvdata=csvdata.set_index('日期')
+        csvdata.sort_index(ascending=True, inplace=True)
         csvdata.sort_index(axis=1, inplace=True)
-        # print(csvdata)
-        # print(csvdata.loc[:,0])
-        # csvdata.drop(index=[0], inplace=True)  #delete 2008/1/2 
-        csvdata.insert(INPUT_TENSOR_SHAPE_LEN + 1, 12, 0)
-        # print(csvdata)
+        csvdata.insert(csvdata.shape[1], 12, 0)
+        print(csvdata.head())
+        predata = csvdata.loc[:,[0]].copy()
         csvdata = csvdata.values
         csvdata = np.array(csvdata)
-        # self.stockdorgata = csvdata.copy()
-        predata = csvdata[:,[0,13]].copy()
-        # csvdata = np.delete(csvdata, [0], axis=1)
-        # print(csvdata)
+        print(csvdata)
         for i in range (DAYTIME, csvdata.shape[0]):
             # print(csvdata[i])
             csvdata[i, INPUT_TENSOR_SHAPE_LEN] = csvdata[i,0]
@@ -76,11 +71,13 @@ def preProcessCsvData(csvdata, type=0):
         # print(csvdata)
         for i in range (0, INPUT_TENSOR_SHAPE_LEN):
             csvdata[:,i] = (csvdata[:,i] - csvdata[:,i].min()) / (csvdata[:,i].max() - csvdata[:,i].min())
+        print(predata.head())
     else:
         print('there is not stock data csv data')
         os._exit(-1)
     # print(predata)
-    xdata = csvdata[ : , 0:INPUT_TENSOR_SHAPE_LEN].astype('float32')
+    csvdata[ : , 0:INPUT_TENSOR_SHAPE_LEN] = csvdata[ : , 0:INPUT_TENSOR_SHAPE_LEN].astype('float32')
+    # xdata = csvdata[ : , 0:INPUT_TENSOR_SHAPE_LEN].astype('float32')
     # ydata = predata[ : ].astype('float32')
     # xdata = csvdata[ :predata.shape[0]-TEST_DATA_NUM, 0:INPUT_TENSOR_SHAPE_LEN].astype('float32')
     # ydata = predata[1 : predata.shape[0]-TEST_DATA_NUM+1].astype('float32')
@@ -92,7 +89,7 @@ def preProcessCsvData(csvdata, type=0):
 def trainCsvData(xdata, ydata, code):
     if(type(code) == type(1)):
         code = "%(code)06d"%{'code':code}
-    xdata = xdata[ :ydata.shape[0]-TEST_DATA_NUM, 0:INPUT_TENSOR_SHAPE_LEN]
+    xdata = xdata[ :ydata.shape[0]-TEST_DATA_NUM, 0:INPUT_TENSOR_SHAPE_LEN].astype('float32')
     ydata = ydata[DAYOFF : ydata.shape[0]-TEST_DATA_NUM+DAYOFF, 0].astype('float32')
 
     print(xdata[0, 0:INPUT_TENSOR_SHAPE_LEN].shape)
