@@ -8,12 +8,12 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 
 TEST_DATA_NUM   = 50
-INPUT_TENSOR_SHAPE_LEN   = 13
-RNN_CELLSIZE = 15
+INPUT_TENSOR_SHAPE_LEN   = 10
+RNN_CELLSIZE = 10
 BATCHSIZE = 13
 TRAINING_EPOH   = 50
 DAYTIME = 5
-DAYOFF = 1
+DAYOFF = 0 #0:nextday, 1:next two day
 
 MODELDIR = os.path.dirname(os.path.abspath(__file__)) + "\\model"
 if (os.path.exists(MODELDIR) == False):
@@ -69,12 +69,13 @@ def preProcessCsvData(csvdata, type=0):
                 csvdata[i, csvdata.shape[1]-2] = csvdata[i, csvdata.shape[1]-2] + csvdata[i - j - 1, 0]
             csvdata[i, csvdata.shape[1]-2] = csvdata[i, csvdata.shape[1]-2] / DAYTIME
         # print(csvdata[:20, :])
-        for i in range (0, INPUT_TENSOR_SHAPE_LEN):
-            csvdata[:,i] = (csvdata[:,i] - csvdata[:,i].min()) / (csvdata[:,i].max() - csvdata[:,i].min())
+        # for i in range (0, csvdata.shape[1] - 1):
+        #     csvdata[:,i] = (csvdata[:,i] - csvdata[:,i].min()) / (csvdata[:,i].max() - csvdata[:,i].min())
+        testst = csvdata.shape[0]-TEST_DATA_NUM
+        scaler = MinMaxScaler()
+        csvdata[:testst , 0:csvdata.shape[1] - 1] = scaler.fit_transform(csvdata[:testst , 0:csvdata.shape[1] - 1])
+        csvdata[testst: , 0:csvdata.shape[1] - 1] = scaler.transform(csvdata[testst: , 0:csvdata.shape[1] - 1])
         # print(csvdata[:20, :])
-        # xtrain = xdata[ : trainlen, 0:INPUT_TENSOR_SHAPE_LEN].astype('float32')
-        # scaler = MinMaxScaler
-
     else:
         print('there is not stock data csv data')
         os._exit(-1)
@@ -87,14 +88,16 @@ def preProcessCsvData(csvdata, type=0):
 def trainCsvData(xdata, ydata, code):
     if(type(code) == type(1)):
         code = "%(code)06d"%{'code':code}
-    trainlen = ydata.shape[0]-TEST_DATA_NUM
-    xtrain = xdata[ : trainlen, 0:INPUT_TENSOR_SHAPE_LEN].astype('float32')
-    ytrain = ydata[DAYOFF : trainlen+DAYOFF, 0].astype('float32')
+    xtrainend = ydata.shape[0]-TEST_DATA_NUM - DAYOFF - INPUT_TENSOR_SHAPE_LEN
+    xtrain, ytrain = [], []
+    for i in range (0, xtrainend):
+        xtrain.append(np.array(xdata[i : i+INPUT_TENSOR_SHAPE_LEN, 0]))
+        ytrain.append(np.array(ydata[i+INPUT_TENSOR_SHAPE_LEN+DAYOFF, 0]))
+        # print(xdata[i : i+INPUT_TENSOR_SHAPE_LEN, xdata.shape[1]-1])
+        # print(ydata[i+INPUT_TENSOR_SHAPE_LEN+DAYOFF, 1])
+    xtrain, ytrain = np.array(xtrain).astype('float32').reshape([-1,INPUT_TENSOR_SHAPE_LEN]), np.array(ytrain).astype('float32').reshape([-1,1])
 
-    print(xdata[ : trainlen, :])
-    print(ydata[DAYOFF : trainlen+DAYOFF, :])
-
-    # print(xdata[0, 0:INPUT_TENSOR_SHAPE_LEN].shape, xdata[0, 0:INPUT_TENSOR_SHAPE_LEN])
+    print(xtrain.shape, ytrain.shape)
     model_layers = [
         tf.keras.layers.Reshape((INPUT_TENSOR_SHAPE_LEN, 1),input_shape=(INPUT_TENSOR_SHAPE_LEN,)),
         tf.keras.layers.GRU(RNN_CELLSIZE, return_sequences=True),
@@ -106,23 +109,26 @@ def trainCsvData(xdata, ydata, code):
        loss = 'mean_squared_error',
        optimizer = 'adam' )
     h = model.fit(xtrain, ytrain, batch_size=BATCHSIZE, epochs = TRAINING_EPOH)
-    model.save(MODELDIR + '\\%(code)s.h5'%{'code': code})
+    model.save(MODELDIR + '\\%(code)s-%(num)soff%(day)sday.h5'%{'code': code, 'num': INPUT_TENSOR_SHAPE_LEN, 'day': DAYOFF+1})
     # plt.plot(h.history['loss'])
     # plt.show()
     
 def verifyCsvData(xdata, ydata, code):
     if(type(code) == type(1)):
         code = "%(code)06d"%{'code':code}
-    verifylen = ydata.shape[0]-TEST_DATA_NUM
-    xverify = xdata[verifylen : ydata.shape[0]-DAYOFF, 0:INPUT_TENSOR_SHAPE_LEN].astype('float32')
-    yverify = ydata[verifylen+DAYOFF : ydata.shape[0], :]#.astype('float32')
+    xverifyst = ydata.shape[0]-TEST_DATA_NUM - INPUT_TENSOR_SHAPE_LEN - DAYOFF
+    xverify, yverify = [], []
+    for i in range (xverifyst, ydata.shape[0]-INPUT_TENSOR_SHAPE_LEN - DAYOFF):
+        xverify.append(np.array(xdata[i : i+INPUT_TENSOR_SHAPE_LEN, 0]))
+        yverify.append(np.array(ydata[i+INPUT_TENSOR_SHAPE_LEN+DAYOFF, 0]))
+        # print(xdata[i : i+INPUT_TENSOR_SHAPE_LEN, xdata.shape[1]-1])
+        # print(ydata[i+INPUT_TENSOR_SHAPE_LEN+DAYOFF, 1])
+    xverify, yverify = np.array(xverify).astype('float32').reshape([-1,INPUT_TENSOR_SHAPE_LEN]), np.array(yverify).astype('float32').reshape([-1,1])
     
-    print(xdata[verifylen +30 : verifylen+40, :])
-    print(ydata[verifylen+DAYOFF +30 : verifylen+DAYOFF+40, :])
 
-    model = tf.keras.models.load_model(MODELDIR + '\\%(code)s.h5'%{'code': code})
+    model = tf.keras.models.load_model(MODELDIR + '\\%(code)s-%(num)soff%(day)sday.h5'%{'code': code, 'num': INPUT_TENSOR_SHAPE_LEN, 'day': DAYOFF+1})
     predict = []
-    for i in range(TEST_DATA_NUM - DAYOFF):
+    for i in range(TEST_DATA_NUM):
         # print(xverify[i, 0:INPUT_TENSOR_SHAPE_LEN])
         x_train = xverify[i, 0:INPUT_TENSOR_SHAPE_LEN].reshape(1,INPUT_TENSOR_SHAPE_LEN)
         one_predict = model.predict(x_train)[0][0]
@@ -130,9 +136,9 @@ def verifyCsvData(xdata, ydata, code):
     print("pre is :", predict)
     print("real is :", yverify[:, 0])
     
-    x = range(1, TEST_DATA_NUM + 1 - DAYOFF, 1)
     plt.figure(1)
     plt.subplot(121)
+    x = ydata[ydata.shape[0] - TEST_DATA_NUM : , 1]
     plt.plot(x, yverify[:,0], 'r', label='ydtat')
     plt.plot(x, predict, 'g', label='predata')
     plt.ylim(yverify[:,0].min() - 1, yverify[:,0].max() + 1)
@@ -149,13 +155,14 @@ def verifyCsvData(xdata, ydata, code):
     zeoroff[:] = zeoroff[:] - max(predict) + min(predict)
     plt.plot(x, zeoroff, 'g', label='minoffset')
     plt.ylim(yverify[:,0].min() - 1 - offset, yverify[:,0].max() + 1 -offset )
+    plt.gcf().autofmt_xdate()
     plt.legend()
     plt.show()
 
 def oneCodeRnn(code):
     csvdata = getCsvData(code)
     xtrain, ypre = preProcessCsvData(csvdata, 1)
-    # trainCsvData(xtrain, ypre, code)
+    trainCsvData(xtrain, ypre, code)
     verifyCsvData(xtrain, ypre, code)
 
 if __name__ == '__main__': 

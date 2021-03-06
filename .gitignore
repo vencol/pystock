@@ -2,5 +2,7 @@
 csv
 tsblog
 model
-pyqt/__pycache__
+pyqtplot/__pycache__
+pyqtgraph/__pycache__
+pyqtgraph/data
 pyqt/*.txt

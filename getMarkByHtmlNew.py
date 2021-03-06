@@ -69,6 +69,8 @@ class getStockCsv(object):
             if(today not in self.workdaydata['DATE'].values):
                 update = True
 
+        print(self.workdaydata)
+        print(type(self.workdaydata))
         today = datetime.today().date().strftime("%Y")
         today = today + '-12-31'
         if(update):
@@ -80,8 +82,8 @@ class getStockCsv(object):
                 end = datetime.strptime(end,'%Y-%m-%d').date()  
             if start > end:
                 start,end = end,start
-            self.workdaydata.insert(0, 'DATE', '')
-            self.workdaydata.insert(1, 'TRADEDAY', '')
+            # self.workdaydata.insert(0, 'DATE', '')
+            # self.workdaydata.insert(1, 'TRADEDAY', '')
                 
             while True:
                 if start > end:

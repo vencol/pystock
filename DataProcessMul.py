@@ -37,8 +37,9 @@ class HandleStockData(object):
         if (type == 1 or type == 2 or type == 3 or type == 4 or type == 5):
             self.type    = type
             self.predata = self.read_stock_data()
-            pre, w, b = self.train_data_model()
-            self.sess.close()
+            self.plot_stock()
+            # pre, w, b = self.train_data_model()
+            # self.sess.close()
         else:
             print('type error')
 
@@ -228,6 +229,37 @@ class HandleStockData(object):
 
         return pred, wtemp, btemp
 
+    def plot_stock(self):
+        import matplotlib.pyplot as plt
+        plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
+        plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
+        begin = self.stockdorgata.shape[0] - 30
+        end = self.stockdorgata.shape[0]
+        x = range(begin, end, 1)
+        print(x)
+        # print(self.stockdorgata[begin:,0])
+        # fig=plt.figure()
+        plt.subplot(211)
+        plt.plot(x, self.stockdorgata[begin:end, 0], 'b', label='收盘价')
+        plt.plot(x, self.stockdorgata[begin:end, 1], 'y', label='开盘价')
+        plt.plot(x, self.stockdorgata[begin:end, 3], 'r', label='最高价')
+        plt.plot(x, self.stockdorgata[begin:end, 4], 'g', label='最低价')
+        plt.legend()
+        plt.subplot(212)
+        V1 = self.stockdorgata[begin:end, 5] / (4*60)
+        plt.plot(x, V1, 'r', label='1min成交量')
+        V2 = (self.stockdorgata[begin:end-4, 5] + self.stockdorgata[begin+1:end-3, 5] + self.stockdorgata[begin+2:end-2, 5] + self.stockdorgata[begin+3:end-1, 5] + self.stockdorgata[begin+4:end, 5]) / (5*4*60)
+        plt.plot(x[4:], V2, 'g', label='5day*1min成交量')
+        plt.legend()
+        # plt.subplot(313)
+        # plt.plot(x, self.stockdorgata[begin:end, 11]/5, 'r', label='换手率/5')
+        # # plt.plot(x, V1, 'g', label='1min成交量')
+        # plt.plot(x[4:], V1[4:]/V2, 'b', label='量比')
+        # plt.legend()
+        plt.show()
+        # xdata = self.predata[self.predata.shape[0]-n : self.predata.shape[0]-1, 0:12].astype('float32')
+        # ydata = self.stockdorgata[self.predata.shape[0]-n+1 : self.predata.shape[0], 0].astype('float32')
+
     def plot_data(self, y, pre, high):
         import matplotlib.pyplot as plt
         x = range(1, len(pre)+1, 1)
@@ -263,4 +295,5 @@ class HandleStockData(object):
 
 if __name__ == '__main__': 
     # handleCsv = HandleStockData(688396)
-    handleCsv = HandleStockData(2402)
+    # handleCsv = HandleStockData(2402)
+    handleCsv = HandleStockData(2236)
