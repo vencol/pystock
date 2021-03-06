@@ -115,6 +115,7 @@ class LogicWindow(QMainWindow, Ui_MainWindow):
         if len(text) >= 6:
             items = self.treeWidget.findItems(text, QtCore.Qt.MatchContains | QtCore.Qt.MatchRecursive)
             self.treeWidget.setCurrentItem(items[0])
+            self.graphicswin.plotStock(int(text[:6]))
 
     def searchCodeChange(self, text):
         if text == '' or len(text) >= 6:
