@@ -8,7 +8,8 @@ from PyQt5.QtCore import pyqtSignal, QDate, QStringListModel
 import numpy as np
 import pandas as pd
 from StockCode import *
-from PlotStock import *
+from PlotStock import MyGraphWindow
+from GetStockByCsv import getStockCsv
 
 import _locale
 _locale._getdefaultlocale = (lambda *args: ['zh_CN', 'utf8'])
@@ -37,6 +38,7 @@ class LogicWindow(QMainWindow, Ui_MainWindow):
         self.setMenuData()
         self.setInitData()
         self.setTreeData()
+        self.setStatuBarData()
 
 
     def showEvent(self, evt):
@@ -219,6 +221,36 @@ class LogicWindow(QMainWindow, Ui_MainWindow):
             print(int(item.text(n)[:6]))
             self.graphicswin.plotStock(int(item.text(n)[:6]))
 
+    def setStatuBarData(self):   
+        self.upadteBtn = QtWidgets.QPushButton()
+        self.upadteBtn.setText("更新股票")
+        self.updateProcessBar = QtWidgets.QProgressBar()
+        self.updateProcessBar.setValue(0)
+        self.statusbar.addPermanentWidget(self.upadteBtn,stretch=0)
+        self.statusbar.addPermanentWidget(self.updateProcessBar,stretch=1)
+        self.upadteBtn.clicked.connect(self.updateStockFile)
+        self.updateProcessBar.setTextVisible(False)
+        
+    def updateStockFile(self): 
+        text = self.upadteBtn.text()
+        # self.updateProcessBar.setAlignment(QtCore.Qt.AlignCenter|QtCore.Qt.AlignVCenter)
+        # self.updateProcessBar.setFormat('当前值%v 百分比%p 已加载{},总共 %m'.format(self.updateProcessBar.value()-self.updateProcessBar.minimum()))
+        if text == "更新股票":
+            self.updateProcessBar.setMinimum(0)
+            self.updateProcessBar.setMaximum(0)
+            self.upadteBtn.setDisabled(True)
+            self.upadteBtn.setText("进度：0.00%") 
+            self.getcsv = getStockCsv()
+            self.getcsv.updateProcess.connect(self.updateStockProcess)
+            self.getcsv.start()
+            
+    def updateStockProcess(self, per, time): 
+        if(per >= 100):
+            self.upadteBtn.setText("进度：{:0.2f}% 耗时: {:0.2f}".format(per, time))
+            self.updateProcessBar.setMaximum(100)
+            self.updateProcessBar.setValue(100)
+        else:
+            self.upadteBtn.setText("进度：{:0.2f}% 耗时: {:0.2f}".format(per, time))
 
         
 
