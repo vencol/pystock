@@ -12,8 +12,8 @@ import pandas as pd
 class MyGraphWindow(object):
     csvdir = os.path.dirname(os.path.abspath(__file__)) + '\\..\\csv'
     allxdata = 2000
+    disxdata = 200
     def __init__(self, graphic):
-        self.disxdata = 200
         super(MyGraphWindow, self).__init__()
         pg.setConfigOptions(antialias=True)  # pg全局变量设置函数，antialias=True开启曲线抗锯齿
         self.win = pg.GraphicsLayoutWidget()  # 创建pg layout，可实现数据界面布局自动管理
@@ -29,7 +29,7 @@ class MyGraphWindow(object):
         # self.win.nextRow()  # layout换行，采用垂直排列，不添加此行则默认水平排列
         # self.win.nextRow()  # layout换行，采用垂直排列，不添加此行则默认水平排列
         self.p2 = self.win.addPlot(row=4, col= 0, rowspan=1, colspan=1)
-        self.p2.setLabel('left', text='量能', color='#ffffff')
+        self.p2.setLabel('left', text='量能', color='#ffffff')#, units='W')
         self.p2.showGrid(x=True, y=True)
         self.p2.setLogMode(x=False, y=False)
         # self.p2.setLabel('bottom', text='time', units='s')
@@ -97,12 +97,12 @@ class MyGraphWindow(object):
         setstr += "<span style='color: red'>high:%0.2f " % (self.stockdata['最高价'].values[x])
         setstr += "<span style='color: green'>low:%0.2f " % (self.stockdata['最低价'].values[x])
         
-        print("日期: ", self.stockdata['日期'].values[x])
+        # print("日期: ", self.stockdata['日期'].values[x])
         setstrp1 = "%s %s " % (self.stockname, self.stockdata['日期'].values[x]) 
         x = x + self.allxdata - self.stockdata.index.values[-1] - 1
         # print(x)
-        print("均价： ", self.average[x])
-        print("1min量能：", self.minvalue[x+4])
+        # print("均价： ", self.average[x])
+        # print("1min量能：", self.minvalue[x+4])
         # print(self.min5dvalue[x])
         setstr += "<span style='color: cyan'>1m/1d:%d " % (self.minvalue[x+4])
         setstr += "<span style='color: magenta'>1m/5d:%d " % (self.min5dvalue[x])
@@ -138,11 +138,16 @@ class MyGraphWindow(object):
 
         # print(self.minvalue)
         # print(self.minvalue[])
-        x1 = self.xlow + self.allxdata - self.stockdata.index.values[-1] - 1
-        x2 = self.xhigh + self.allxdata - self.stockdata.index.values[-1] - 1
+        if self.allxdata == self.stockdata.index.values[-1] - 5 :
+            x1 = self.xlow
+            x2 = self.xhigh
+        else:        
+            x1 = self.xlow + self.allxdata - self.stockdata.index.values[-1] - 1
+            x2 = self.xhigh + self.allxdata - self.stockdata.index.values[-1] - 1
         max = self.minvalue[x1 + 4 : x2 + 4].max()
         if max < self.min5dvalue[x1 : x2].max():
             max = self.min5dvalue[x1 : x2].max()
+        # max = max / 10000
         self.p2.setYRange(self.ylow, max, padding=0)   
         
     def getStock(self, code):
@@ -161,7 +166,7 @@ class MyGraphWindow(object):
             print(stockdir, "get empty data")
             return ("", stockdata)
 
-        stockname = stockdata.loc[0,'名称'] + '(' + stockdata.loc[0,'股票代码'][1:] + ')'
+        stockname = '(' + stockdata.loc[0,'股票代码'][1:] + ')' + stockdata.loc[0,'名称'] 
         stockdata = stockdata.drop(['名称', '股票代码'], axis = 1)
         stockdata = stockdata.sort_values(by='日期', ascending=True).reset_index(drop=True, inplace=False)
         return (stockname, stockdata)
@@ -175,6 +180,11 @@ class MyGraphWindow(object):
             self.allxdata = self.stockdata.index.values[-1] - 5
         else:
             self.allxdata = MyGraphWindow.allxdata
+        if MyGraphWindow.disxdata > self.stockdata.index.values[-1]:
+            self.disxdata = self.stockdata.index.values[-1] - 5
+        else:
+            self.disxdata = MyGraphWindow.disxdata
+
         values = self.stockdata['成交量'].values[-self.allxdata-4:]
         self.minvalue = values / (4 * 60)
         self.min5dvalue = ( values[:-4] + values[1:-3] + values[2:-2] + values[3:-1] + values[4:] ) / (5* 4 * 60)
@@ -193,14 +203,8 @@ class MyGraphWindow(object):
         self.p1.setXRange(self.xlow, self.xhigh, padding=0) 
         self.p1.setYRange(self.ylow, self.yhigh, padding=0)  
         
-        # self.labelp1 = pg.LabelItem(justify='right')
-        # self.win.addItem(self.labelp1)
-        # self.p1.showAxis('right', show=True)
-        # raxes = self.p1.getAxis('right')
-        # raxes.setRange(-4, 4)  
-        # labelp1 = pg.LabelItem(justify='right')
-        # self.p1.addItem(labelp1)
-        # labelp1.setText("<span style='font-size: 12pt'> 'asdgas'</span>") # <span style='color: red'>
+    def getStockName(self):
+        return self.stockname
 
 
 

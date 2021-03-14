@@ -40,18 +40,24 @@ class getStockCsv(QtCore.QThread):
         super(getStockCsv, self).__init__()
         self.begintime = time.time()
         self.get_log_path(logname)
+        self.quit = 0
         if (os.path.exists(self.csvdir) == False):
             os.makedirs(self.csvdir)
+        self.get_trade_day()
+        self.getMarket('A')
         # self.get_stock_update_last_time_bynet(1)
         # st, end =self.get_stock_update_last_time_byfile(0)
         # self.get_stock_data(0, end)
         # self.get_stock_update_process(0)
     def run(self):
+        self.quit = 0
         self.updateProcess.emit(0.00, 0.00)
-        self.get_trade_day()
-        self.getMarket('A')
+        self.begintime = time.time()
         self.task_loop(0, self.lastcsvdata.index.size)
-        self.task_loop(0, 5)
+        # self.task_loop(0, 5)
+
+    def stop(self):
+        self.quit = 1
 
     def is_trade_day(self, day):
         if(len(day) != 8):
@@ -181,24 +187,29 @@ class getStockCsv(QtCore.QThread):
     def get_stock_data(self, index, endsave):
         downflag = [255]
         start = ALL_BEGIN_DATE
-        code = self.lastcsvdata.loc[index, ['SYMBOL']]['SYMBOL']
-        if(type(code) == type(1) or type(code) == type(1.0)):
-            code = "%(code)06d"%{'code':code}
-        csvdir = self.csvdir + "\\%(code)s.csv"%{'code': code}
         laststockdata = pd.DataFrame()
-        if(os.path.isfile(csvdir)):
-            try:
-                laststockdata = pd.read_csv(csvdir, encoding='gbk')#, nrows=1)
-                if (laststockdata.empty == False):
-                    if (laststockdata['日期'].empty == False):
-                        start = self.date_formal(laststockdata.loc[0, '日期'])   
-            except pd.errors.EmptyDataError as e: 
-                self.logfp.write("\n%(code)s EmptyDataError at %(time)s\n"%{'code' : code, 'time' : time.strftime("%H:%M:%S")})
-                self.logfp.flush()
-        # start = '2020/18/19'
-        start   = self.date_formal(start)
-        start   = start.replace('-0', '0').replace('-', '')
-        endsave = endsave.replace('-0', '0').replace('-', '')
+        if endsave != '12345':
+            code = self.lastcsvdata.loc[index, ['SYMBOL']]['SYMBOL']
+            if(type(code) == type(1) or type(code) == type(1.0)):
+                code = "%(code)06d"%{'code':code}
+            csvdir = self.csvdir + "\\%(code)s.csv"%{'code': code}
+            if(os.path.isfile(csvdir)):
+                try:
+                    laststockdata = pd.read_csv(csvdir, encoding='gbk')#, nrows=1)
+                    if (laststockdata.empty == False):
+                        if (laststockdata['日期'].empty == False):
+                            start = self.date_formal(laststockdata.loc[0, '日期'])   
+                except pd.errors.EmptyDataError as e: 
+                    self.logfp.write("\n%(code)s EmptyDataError at %(time)s\n"%{'code' : code, 'time' : time.strftime("%H:%M:%S")})
+                    self.logfp.flush()
+            # start = '2020/18/19'
+            start   = self.date_formal(start)
+            start   = start.replace('-0', '0').replace('-', '')
+            endsave = endsave.replace('-0', '0').replace('-', '')
+        else:
+            code = "%(code)06d"%{'code':index}
+            csvdir = self.csvdir + "\\%(code)s.csv"%{'code': code}
+            endsave = datetime.datetime.today().date().strftime("%Y%m%d")
         end = datetime.datetime.today().date().strftime("%Y%m%d")
         # print(start, endsave)
         self.logfp.write("save %(code)06s %(st)s - %(end)s\t"%{'code': code, 'st': start, 'end': end})
@@ -270,6 +281,8 @@ class getStockCsv(QtCore.QThread):
             self.logfp.write("noneedtodownload %(stock)s download job\n"%{'stock' : code})
             start = start[:4] + '-' + start[4:6] + '-' + start[6:]
             end = endsave[:4] + '-' + endsave[4:6] + '-' + endsave[6:]
+        if int(code) == int(index):
+            self.updateProcess.emit(100, 0)
         return start, end
 
 
@@ -413,21 +426,40 @@ class getStockCsv(QtCore.QThread):
         task_list = []
         for index in range (start, end, 1):
             task_list.append(pool.submit(self.get_stock_update_process, index))
-        for f in as_completed(task_list):
-            f_ret = f.result()
-            nowitem += 1
-            print("all\tnow\tpercent\ttime(s)")
-            print("%(all)s\t%(now)s\t%(per).05s%%\t%(time).05ss\n"%{'all': allitem, 'now' : nowitem, 'per' : 100*nowitem/allitem, 'time' : (time.time()-self.begintime)})
-            
-            self.updateProcess.emit(100*nowitem/allitem, time.time()-self.begintime)
-            if( nowitem % 100 == 0 ):
-                self.lastcsvdata.to_csv(self.lastcsvfile, mode='w', encoding='gbk', index=0)#, header=False)
+        for f in as_completed(task_list): #, timeout=15):
+            stocknum = 0 #task_list[f]
+            try:
+                stocknum = f.result()
+                nowitem += 1
+                print("all\t now\t percent\t time(s)\t stocknum:%(num).06d "%{'num' : stocknum})
+                print("%(all)s\t %(now)s\t %(per).05s%%\t\t %(time).05ss\n"%{'all': allitem, 'now' : nowitem, 'per' : 100*nowitem/allitem, 'time' : (time.time()-self.begintime)})
+                
+                self.updateProcess.emit(100*nowitem/allitem, time.time()-self.begintime)
+                if( nowitem % 100 == 0 ):
+                    self.lastcsvdata.to_csv(self.lastcsvfile, mode='w', encoding='gbk', index=0)#, header=False)
+                if self.quit:
+                    for index in range (start, end, 1):
+                        if task_list[index].cancel() == False:
+                            print("task ", index, " quit false")
+                    break
+            except Exception as exc:
+                print('%r generated an exception: %s' % (stocknum, exc))
+            # else:
+            #     print('%r success is ' % (stocknum))
+        # if self.quit:
+        #     print("wait for quit")
+        #     wait(task_list, return_when=ALL_COMPLETED)
+            # for index in range (start, end, 1):
+            #     if task_list[index].wait() == False:
+            #         print("wait task ", index, " quit false")
+
+
         self.sleep(3)
         self.lastcsvdata.to_csv(self.lastcsvfile, mode='w', encoding='gbk', index=0)#, header=False)
         self.logfp.write("%(symbol)s \n"%{'symbol':self.lastcsvdata})
         self.logfp.write("last csvdata time update at %(time)s\n"%{'time' : time.strftime("%H:%M:%S")})
         self.logfp.flush()
-        self.logfp.close()
+        # self.logfp.close()
 
 
 

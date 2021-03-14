@@ -29,16 +29,14 @@ class LogicWindow(QMainWindow, Ui_MainWindow):
     def __init__(self, parent=None):
         super(LogicWindow, self).__init__(parent)
         self.setupUi(self)
-        # self.formLayout.setSizeConstraint(QLayout.SetFixedSize)
-        # self.formLayout.setSizeConstraint(QLayout::SetFixedSize)
-        # self.groupBox.setTitle(_translate("MainWindow", "GroupBox"))
         self.graphicswin = MyGraphWindow(self.graphicbox)
-        # self.graphicswin.plotStock(2402)
 
         self.setMenuData()
         self.setInitData()
         self.setTreeData()
         self.setStatuBarData()
+        self.setSelectTreeData()
+        self.graphicswin.plotStock(2402)
 
 
     def showEvent(self, evt):
@@ -222,36 +220,99 @@ class LogicWindow(QMainWindow, Ui_MainWindow):
             self.graphicswin.plotStock(int(item.text(n)[:6]))
 
     def setStatuBarData(self):   
+        self.upadteOne = QtWidgets.QPushButton()
+        self.upadteOne.setText("更新当前股票")
+        self.upadteOne.setCheckable(True)
+        self.upadteOne.clicked.connect(lambda :self.updateStockFile(self.upadteOne))
         self.upadteBtn = QtWidgets.QPushButton()
-        self.upadteBtn.setText("更新股票")
+        self.upadteBtn.setText("更新所有股票")
+        self.upadteBtn.clicked.connect(lambda :self.updateStockFile(self.upadteBtn))
+        # self.upadteBtn.clicked.connect(self.updateStockFile(self.upadteBtn))
         self.updateProcessBar = QtWidgets.QProgressBar()
         self.updateProcessBar.setValue(0)
-        self.statusbar.addPermanentWidget(self.upadteBtn,stretch=0)
-        self.statusbar.addPermanentWidget(self.updateProcessBar,stretch=1)
-        self.upadteBtn.clicked.connect(self.updateStockFile)
         self.updateProcessBar.setTextVisible(False)
+        self.anlayBtn = QtWidgets.QPushButton()
+        self.anlayBtn.setText("自动筛选")
+        self.anlayBtn.adjustSize()
+        self.anlayBtn.clicked.connect(self.autoAnlayStock)
         
-    def updateStockFile(self): 
-        text = self.upadteBtn.text()
-        # self.updateProcessBar.setAlignment(QtCore.Qt.AlignCenter|QtCore.Qt.AlignVCenter)
-        # self.updateProcessBar.setFormat('当前值%v 百分比%p 已加载{},总共 %m'.format(self.updateProcessBar.value()-self.updateProcessBar.minimum()))
-        if text == "更新股票":
+        self.statusbar.showMessage("sdkgh")
+        self.statusbar.addPermanentWidget(self.updateProcessBar,stretch=0)
+        self.statusbar.addPermanentWidget(self.upadteOne,stretch=0)
+        self.statusbar.addPermanentWidget(self.upadteBtn,stretch=0)
+        self.statusbar.addPermanentWidget(self.anlayBtn,stretch=0)
+        self.getcsv = getStockCsv()
+        self.getcsv.updateProcess.connect(self.updateStockProcess)
+        
+        
+    def updateStockFile(self, btn): 
+        print(btn.text()[:2])
+        print(btn.text())
+        self.upadteOne.setDisabled(True)
+        self.upadteBtn.setDisabled(True)
+        self.anlayBtn.setDisabled(True)
+        self.updateProcessBar.setMinimum(0)
+        if btn.text()[:2] == '更新':
+            btn.setDisabled(False)
+            btn.setText(btn.text()[2:] + "进度：0.00%") 
+            self.updateProcessBar.setMaximum(0)
+            if self.upadteOne.text() == btn.text():
+                print(int(self.graphicswin.getStockName()[1:7]))
+                self.getcsv.get_stock_data(int(self.graphicswin.getStockName()[1:7]), '12345')
+            elif self.upadteBtn.text() == btn.text():
+                self.getcsv.start()
+        else:
+            if btn.text()[:2] == '所有':
+                # if btn.text()[:2] == '当前':
+                self.getcsv.stop()
+                # self.getcsv.quit()
+                self.getcsv.wait()
+            btn.setText("更新" + btn.text()[:4]) 
+            self.updateProcessBar.setMaximum(100)
+            self.upadteOne.setDisabled(False)
+            self.upadteBtn.setDisabled(False)
+            self.anlayBtn.setDisabled(False)
+            
+    def updateStockProcess(self, per, time): 
+        print(self.upadteOne.text())
+        print(self.upadteOne.text()[:2])
+        print(self.upadteBtn.text())
+        if self.upadteOne.text()[:2] == '当前':
+            self.upadteOne.setText('更新当前股票')
+            # self.upadteOne.setText(self.upadteOne.text()[:6] + "：{:0.2f}% ".format(per))
+        elif self.upadteBtn.text()[:2] == '所有':
+            self.upadteBtn.setText(self.upadteBtn.text()[:6] + "：{:0.2f}% 耗时: {:0.2f}".format(per, time))
+        if(per >= 100):
+            self.updateProcessBar.setMaximum(100)
+            self.updateProcessBar.setValue(100)
+            self.upadteOne.setDisabled(False)
+            self.upadteBtn.setDisabled(False)
+            self.anlayBtn.setDisabled(False)
+
+    def autoAnlayStock(self): 
+        text = self.anlayBtn.text()
+        if text == "自动筛选":
             self.updateProcessBar.setMinimum(0)
             self.updateProcessBar.setMaximum(0)
             self.upadteBtn.setDisabled(True)
-            self.upadteBtn.setText("进度：0.00%") 
-            self.getcsv = getStockCsv()
-            self.getcsv.updateProcess.connect(self.updateStockProcess)
-            self.getcsv.start()
-            
-    def updateStockProcess(self, per, time): 
-        if(per >= 100):
-            self.upadteBtn.setText("进度：{:0.2f}% 耗时: {:0.2f}".format(per, time))
-            self.updateProcessBar.setMaximum(100)
-            self.updateProcessBar.setValue(100)
-        else:
-            self.upadteBtn.setText("进度：{:0.2f}% 耗时: {:0.2f}".format(per, time))
+            self.anlayBtn.setDisabled(True)
+            self.anlayBtn.setText("筛选进度：0.00%") 
 
+    def setSelectTreeData(self):#use more source
+        self.treeSelect.headerItem().setText(0, "筛选策略")
+        UpParent = QTreeWidgetItem(self.treeSelect)
+        UpParent.setText(0, "买入策略")
+        child = QTreeWidgetItem(UpParent)
+        child.setText(0, "策略1")
+        child.setToolTip(0, "this is a test")
+        UpParent = QTreeWidgetItem(child)
+        UpParent.setText(0, "策略1实例")
+
+        UpParent = QTreeWidgetItem(self.treeSelect)
+        UpParent.setText(0, "卖出策略")
+
+        UpParent = QTreeWidgetItem(self.treeSelect)
+        UpParent.setText(0, "当前股票分析策略")
         
 
 if __name__ == "__main__": 
