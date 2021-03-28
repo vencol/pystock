@@ -97,18 +97,22 @@ class MyGraphWindow(object):
         setstr += "<span style='color: red'>high:%0.2f " % (self.stockdata['最高价'].values[x])
         setstr += "<span style='color: green'>low:%0.2f " % (self.stockdata['最低价'].values[x])
         
-        # print("日期: ", self.stockdata['日期'].values[x])
-        setstrp1 = "%s %s " % (self.stockname, self.stockdata['日期'].values[x]) 
-        x = x + self.allxdata - self.stockdata.index.values[-1] - 1
+        
         # print(x)
-        # print("均价： ", self.average[x])
-        # print("1min量能：", self.minvalue[x+4])
-        # print(self.min5dvalue[x])
-        setstr += "<span style='color: cyan'>1m/1d:%d " % (self.minvalue[x+4])
-        setstr += "<span style='color: magenta'>1m/5d:%d " % (self.min5dvalue[x])
+        # print("日期: ", self.stockdata['日期'].values[x])
+        # print("成交量: ", self.stockdata['成交量'].values[x])
+        setstrp1 = "%s %s " % (self.stockname, self.stockdata['日期'].values[x]) 
+        x2 = x + self.allxdata - self.stockdata.index.values[-1] - 1
+        # print(x2)
+        # print("1min量能：", self.minvalue[x2+4])
+        # print("3dmin量能：", self.min3dvalue[x2+2])
+        # print("5dmin量能：", self.min5dvalue[x2])
+        setstr += "<span style='color: cyan'>1m/1d:%d " % (self.minvalue[x2+4])
+        setstr += "<span style='color: white'>1m/3d:%d " % (self.min3dvalue[x2+2])
+        setstr += "<span style='color: magenta'>1m/5d:%d " % (self.min5dvalue[x2])
         self.p2.setTitle(setstr)
         
-        setstrp1 += "量均价:%0.2f " % (self.average[x])
+        setstrp1 += "量均价:%0.2f " % (self.average[x2])
         setstrp1 += " x=%d y=%0.1f " % (x, y)
         self.p1.setTitle(setstrp1)
 
@@ -187,8 +191,10 @@ class MyGraphWindow(object):
 
         values = self.stockdata['成交量'].values[-self.allxdata-4:]
         self.minvalue = values / (4 * 60)
+        self.min3dvalue = ( values[:-2] + values[1:-1] + values[2:] ) / (3* 4 * 60)
         self.min5dvalue = ( values[:-4] + values[1:-3] + values[2:-2] + values[3:-1] + values[4:] ) / (5* 4 * 60)
         self.p2.plot(self.stockdata.index[-self.allxdata:], self.minvalue[4:], pen='c', name='1min', clear=True)
+        self.p2.plot(self.stockdata.index[-self.allxdata:], self.min3dvalue[2:], pen='w', name='1m/3d', clear=False)
         self.p2.plot(self.stockdata.index[-self.allxdata:], self.min5dvalue, pen='m', name='1m/5d', clear=False)
 
         self.p1.setTitle(self.stockname)
